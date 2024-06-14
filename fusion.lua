@@ -2,6 +2,25 @@ local Console = {}
 local internal = {}
 math.randomseed(tick()) 
 
+internal.Flags = { 
+
+    -- This enables more debug information in the output when running Fusion
+	DebugMode = true;
+
+	-------------------------------------------
+	--[[Allow Live Installs 
+
+	This is a optional configuration available for Fusion. 
+	Due to potential security concerns, we strongly suggest keeping this disabled. 
+	
+	This allows any script or plugin to install services to Fusion. This is good for tinkering and development,
+	but not safe to run in live servers or insecure Studio environments. 
+
+	Note: This flag is permanently disabled when using Fusion in a plugin environment.]]
+	AllowLiveInstalls = false;
+	-------------------------------------------
+}
+
 internal.DebugMode = false
 
 pcall(function() 
@@ -9,9 +28,6 @@ pcall(function()
 		internal.Client = true
 	end
 end)
-
--- Establish our variables
-local Services = script:FindFirstChild("services")
 
 local ResponseLibrary = game.ReplicatedStorage:FindFirstChild("Response")
 if ResponseLibrary then
@@ -28,6 +44,13 @@ end
 internal.MatchTable = {}
 internal.Alphanumeric = "qwertyuioplkjhgfdsazxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM0987654321/ .,;'[]-=)(*&^+%$#@!~"..'"'
 internal.UsedHex = {}
+internal.StandaloneMode = true 
+local Services = game.ServerStorage:FindFirstChild("services")
+
+if (not Services) then 
+	internal.StandaloneMode = false
+end
+
 
 function internal:CheckArray(Table, SearchValue)
 	for Integer, Value in ipairs(Table) do
@@ -61,7 +84,7 @@ do local CurrentHex = string.sub(internal.Alphanumeric, Integer, Integer)
 		local Match = internal:CheckArray(internal.UsedHex, Block)
 
 		if TimeoutCount == 70 then 
-			error("Fatal mathematics error with Fusion Framework's security. Potentially caused by a memory malfunction.")
+			error("Fatal mathematics error with Fusion Framework's security. Potentially caused by a memory malfunction. ErrNo#"..URC.Failed)
 			break
 		end
 	until Match == URC.NotFound
@@ -74,7 +97,7 @@ end
 
 function Console:Cipher(newstring, rando)
 	if not newstring then return URC.InvalidData end
-	
+
 	local CipheredStr = ""
 
 	for IntegerPos = 1, newstring.len(newstring) do
@@ -199,7 +222,7 @@ function Console.WriteLine(SecurityKey, ...)
 end
 
 function internal:Print(Data)
-	Console.WriteLine(internal.SelfSigned, string.upper(tostring(Data)))
+	Console.WriteLine(internal.SelfSigned, tostring(Data))
 end
 
 -- Quick notice for the user if universal response codes are in effect.
@@ -232,6 +255,10 @@ function Console.Create(Type, Parent, Data)
 	return NewObj -- Back to station!
 end
 
+function internal:DebugPrint(str)
+	internal:Print("[DebugMode] "..str)
+end
+
 -- Function for setting up OAuth for our built-in services
 -- OAuth is the protocol name for the API handler system that CS uses. It uses Public Keys and Private Keys
 -- In order to secure API calls. This way we will always know how to verify any requests/whatever based on their
@@ -248,13 +275,13 @@ function Console.SetupOAuth(Key, API)
 		if not (FindSource == URC.NotFound) then -- If key is valid
 			--local Details  
 			--local success, fail = pcall(function()
-				Details = API[Function](nil,Data) -- Second parameter because module limitations, converting it to the right format
+			Details = API[Function](nil,Data) -- Second parameter because module limitations, converting it to the right format
 			--end)
-			
+
 			--if success then
-				return Details
+			return Details
 			--else
-				--Console.WriteLine("Error detected accessing Fusion libraries: "..tostring(fail))
+			--Console.WriteLine("Error detected accessing Fusion libraries: "..tostring(fail))
 			--end
 		else
 			internal:Print("OAuth Registration Error: "..FindSource) --Rip 
@@ -282,7 +309,7 @@ function Console.SetupOAuth(Key, API)
 	_G[Service[1].Name.."Async"] = function(Data) return Bridge(Data) end
 
 	--[[ For debug synchronous calls
-		This simply just passes debug info to your service. It is up to the server to handle it and how it handles it.
+		This simply just passes debug info to your service. It is up to the service and how it handles it.
 		Most ones I made will simply output more info when called with debug, to help find errors.
 		Example: _G.WhateverDebug({Function = "Lighting";Mode = "Set";Value = 0})
 	--]]
@@ -301,6 +328,24 @@ _G["SetupOAuth"] = function(Script)
 		return Key
 	else
 		return URC.Fault
+	end
+end
+
+_G["LoadService"] = function(Service)
+	local LoadTimeout = 0
+	repeat wait(1) LoadTimeout = LoadTimeout + 1 until internal.Loaded or LoadTimeout >=6
+
+	if (not internal.Loaded) then 
+		return URC.Timeout
+	end
+
+	if internal.Flags.AllowLiveInstalls then 
+		Console.SpawnService(Service)
+	else
+		if internal.DebugMode then 
+			internal:DebugPrint(Service.Name.." was blocked after attempting to access this Fusion installation. If this is an intentional action, Fusion flag 'AllowLiveInstalls' needs to be enabled.")
+		end
+		return URC.AccessDenied
 	end
 end
 
@@ -348,12 +393,8 @@ function Console.CheckDependancy(name)
 	end
 end
 
-internal:Print("S T A R T I N G    . . .") -- Just for fun
-internal:Print("SYSTEM PROCEEDING WITH STARTUP, DETECTED "..tostring(#Services:GetChildren()) .." UNINSTALLED SERVICES.")
-
-for _,Service in ipairs(Services:GetChildren()) do -- Loop through all the modules
+function Console.SpawnService(Service)
 	local Count = tick() -- Keep track of the time for installation
-
 	spawn(function() -- Start new thread
 		local Activation -- Establish activation variable
 		local Key = Console:Cipher(Service.Name) -- Create new cryptographic hash for verification
@@ -363,21 +404,42 @@ for _,Service in ipairs(Services:GetChildren()) do -- Loop through all the modul
 		local SubCount = 0 -- Gotta keep track again!
 		repeat wait(.2) -- Start loop
 			SubCount = SubCount + 1	-- Start keeping track of timeout data
-			if SubCount == 45 then internal:Print("'"..Services.Name.."."..Service.Name.."' is not responding. The installation will be halted if it does not respond shortly.") end
+			if SubCount == 45 then internal:Print("Service: '"..Service.Name.."' is not responding. The installation will be halted if it does not respond shortly.") end
 		until SubCount >= 75 or Activation -- Kill loo
 
 		local TimeSpent = tick() - Count -- Calculate time spent.
-		if Activation then -- Base our decision of the fate of the module whether it responded back or not, for security/compatibility reasons.
+		if (Activation==Key) then -- Base our decision of the fate of the module whether it responded back or not, for security/compatibility reasons.
 			pcall(function()Services[tostring(Service)] = require(Service) end)  -- Add the module's libraries to our Services{} table
 			local Str = "server"
 			if internal.Client then Str = "client" end
 
-			internal:Print("Successfully installed '"..Services.Name.."."..Service.Name.."' to the "..Str.." in "..string.sub(tostring(TimeSpent), 1, 4).." sec. ")
-			
+			-- Let's parse any available information! 
+			local Info = require(Service).Info
+			local InfoName = tostring((Info["Name"] or Service.Name))
+			local InfoVersion = tostring((Info["Version"] or "?"))
+			local InfoEnv = tostring((Info["EnvType"] or "?"))
+
+			internal:Print("Successfully installed service: "..InfoName.."-"..InfoEnv.." ("..InfoVersion..")".." to the "..Str.." in "..string.sub(tostring(TimeSpent), 1, 4).." sec. ")
+
 		else 
-			internal:Print("Failed to install '"..tostring(Services.Name).."."..tostring(Service.Name).."' (Err: "..tostring(URC.Timeout)..".) For security, this service has been destroyed.") -- Print out our error
+			internal:Print("Failed to install "..InfoName.."-"..InfoEnv.." ("..InfoVersion..") ErrNo:"..tostring(URC.Timeout)..".) For security, this service has been destroyed.") -- Print out our error
 			Service:Destroy() -- Get rid of the service
 		end
 	end)
+end 
+
+-- If this is running in standalone mode, we want to automatically import all the saved services 
+if internal.StandaloneMode then 
+	for _,Service in ipairs(Services:GetChildren()) do -- Loop through all the modules
+		Console.SpawnService(Service)
+	end
+	internal.Loaded = true 
+
+else
+	internal:Print("Fusion is loaded, however there are no services installed.")
+
 end
 
+if internal.DebugMode then
+	internal:DebugPrint(" Enabled.")
+end
