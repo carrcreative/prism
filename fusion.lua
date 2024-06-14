@@ -364,9 +364,9 @@ for _,Service in ipairs(Services:GetChildren()) do -- Loop through all the modul
 		repeat wait(.2) -- Start loop
 			SubCount = SubCount + 1	-- Start keeping track of timeout data
 			if SubCount == 45 then internal:Print("'"..Services.Name.."."..Service.Name.."' is not responding. The installation will be halted if it does not respond shortly.") end
-		until SubCount >= 75 or Activation -- Kill loop
+		until SubCount >= 75 or Activation -- Kill loo
 
-		local TimeSpent = tick() - Count -- Calculate time spent 
+		local TimeSpent = tick() - Count -- Calculate time spent.
 		if Activation then -- Base our decision of the fate of the module whether it responded back or not, for security/compatibility reasons.
 			pcall(function()Services[tostring(Service)] = require(Service) end)  -- Add the module's libraries to our Services{} table
 			local Str = "server"
