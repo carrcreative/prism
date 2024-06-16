@@ -1,383 +1,319 @@
-local Console = {} 
-local internal = {}
-math.randomseed(tick()) 
+-- These are three security clearance levels we want to create
+local external          = {} -- Functions accessable to every server script
+local internal          = {} -- Functions accessable only within Fusion's core, these are the most sensitive functions.
+local console           = {} -- Functions accessable by apps compatible with Fusion, only after they 
 
-internal.DebugMode = false
+local RunService = game:GetService("RunService")
 
-pcall(function() 
-	if game.Players.LocalPlayer then 
-		internal.Client = true
-	end
-end)
+internal.LogEntries     = {}
+internal.AppDataStorage = {}
+internal.AppKeys        = {}
+internal.AppInst        = {}
+internal.OneTimeKeys	= {}
+internal.RequestTimeout = 10 -- Time in seconds to wait before allowing another request from the same app
+internal.KeyValPeriod   = 30 -- Time in seconds for which a one-time key is valid
 
--- Establish our variables
-local Services = script:FindFirstChild("services")
 
-local ResponseLibrary = game.ReplicatedStorage:FindFirstChild("Response")
-if ResponseLibrary then
-	URC = require(game.ReplicatedStorage.Response)
-else
-	-- Downgrading our universal response codes to basic binary output, for games that don't have it installed 
-	URC = {
-		Valid=true;Found=true;
-		Fault=false;InvalidData=false;AccessDenied=false;Timeout=false;NotFound=false;Busy=false;Incompatibility=false;Duplicate=false;
-	}
+-- Function to verify the app's key before providing access to console functions
+function internal:VerifyKey(AppName, Key)
+    return internal.AppKeys[AppName].Key == Key
 end
 
--- Generating our match table 
-internal.MatchTable = {}
-internal.Alphanumeric = "qwertyuioplkjhgfdsazxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM0987654321/ .,;'[]-=)(*&^+%$#@!~"..'"'
-internal.UsedHex = {}
+-- This simple function returns the table, it is up to the calling function to save this properly. 
+function console:GenerateKey(ForcedKeyLength, ForcedTimeout)
+	-- Initialize an empty Key string
+		local Key = ""
+		-- Table to keep track of used Keys to ensure uniqueness
+		local UsedKeys = internal.UsedKeys or {}
 
-function internal:CheckArray(Table, SearchValue)
-	for Integer, Value in ipairs(Table) do
-		if Value == SearchValue then
-			return URC.Found
-		end
-	end
-	return URC.NotFound
-end
+		-- Record the start time for the Timeout feature
+		local StartTime = os.time()
 
-for Integer = 1, string.len(internal.Alphanumeric), 1 
-do local CurrentHex = string.sub(internal.Alphanumeric, Integer, Integer)
-	local Block
-	local TimeoutCount = 0 
-	repeat 
-		TimeoutCount = TimeoutCount + 1 -- Queue up the loop timeout timer
-		local AlphaAmnt = math.random(1,9) -- Random amount of characters for thie bitmap
+		-- Define the Timeout duration in seconds. We want 10 seconds to be the default, unless overridden
+		local Timeout = (ForcedTimeout or 10)
 
-		local FullHex = ""
-		--First step of generating our string block. We want to generate a random key to assign our block. This will replace the string characters when encrypted
-		for i = 1, AlphaAmnt, 1 do
-			local HexMath = math.random(1, string.len(internal.Alphanumeric))
-			local RandHex = string.sub(internal.Alphanumeric, HexMath, HexMath)
-			FullHex = FullHex .. RandHex
-		end 
+		-- Local variable for us to make some modifications to the key length if needed. 
+		-- We don't want keys to be generated that are under 16 characters, as this can pose security risk and memory errors.
+		local KeyLength = (ForcedKeyLength or 16)
 
-
-		local SecretMath = math.random(111,999) * math.random(1,9)
-		Block = tostring(SecretMath) .. tostring(FullHex)
-
-		local Match = internal:CheckArray(internal.UsedHex, Block)
-
-		if TimeoutCount == 70 then 
-			error("Fatal mathematics error with Fusion Framework's security. Potentially caused by a memory malfunction.")
-			break
-		end
-	until Match == URC.NotFound
-
-
-	TimeoutCount = 0
-	internal.MatchTable[CurrentHex] = Block 
-	table.insert(internal.UsedHex, Block)
-end
-
-function Console:Cipher(newstring, rando)
-	if not newstring then return URC.InvalidData end
-	
-	local CipheredStr = ""
-
-	for IntegerPos = 1, newstring.len(newstring) do
-		local CurrentHex = newstring.sub(newstring, IntegerPos,IntegerPos)
-		CipheredStr = CipheredStr..tostring(internal.MatchTable[CurrentHex])
-	end
-
-	return CipheredStr
-end
-
-function Console:Decipher(newstring, rando)
-	local function MatchBlock(block)
-		for Key,Value in pairs(internal.MatchTable) do
-			if block == Value then return Key end
-		end
-		return URC.NotFound
-	end
-
-
-	local Str = ""
-	local Progress = 1
-	local MemoryStretchLimit = 20
-	local BlockStretch = 1
-	local CipherFail = false
-
-	repeat 
-		local LockedBlock = string.sub(newstring, Progress, Progress+BlockStretch)
-		local CheckLock = MatchBlock(LockedBlock)
-
-		if not (CheckLock == URC.NotFound) then
-			Str = Str..CheckLock 
-			Progress = Progress + BlockStretch + 1
-			BlockStretch = 1
-		else
-			BlockStretch = BlockStretch + 1
+		-- Now let's verify that we aren't be asked to generate keys that are too short!
+		if not (type(ForcedKeyLength) == "number") or not (ForcedKeyLength >= 16) or ((ForcedKeyLength or ForcedTimeout) > 128)  then 
+			-- Fix the key length, and also notify the user with a warning.
+			KeyLength = 16 
+			Timeout = 10
+			--console:Write(internal.SelfSign,"Warning: Attempted to call internal function GenerateKey() with invalid parameters. We let the function through, but we had to override the parameters with default values. ")
 		end
 
-		if BlockStretch >= MemoryStretchLimit then
-			CipherFail = true
-			break
+		-- Local function for first-time setup only
+		-- Function to generate a table of all alphanumeric characters and symbols
+		local function GenerateAlphanumericAndSymbolsTable()
+			local chars = {}
+			-- Add numeric characters (0-9)
+			for i = 48, 57 do table.insert(chars, string.char(i)) end
+			-- Add uppercase letters (A-Z)
+			for i = 65, 90 do table.insert(chars, string.char(i)) end
+			-- Add lowercase letters (a-z)
+			for i = 97, 122 do table.insert(chars, string.char(i)) end
+			-- Add common symbols
+			for i = 32, 47 do table.insert(chars, string.char(i)) end -- Space and punctuation
+			for i = 58, 64 do table.insert(chars, string.char(i)) end -- Special characters
+			for i = 91, 96 do table.insert(chars, string.char(i)) end -- Brackets and caret
+			for i = 123, 126 do table.insert(chars, string.char(i)) end -- Braces and tilde
+			return chars
 		end
 
-
-	until Progress >= string.len(newstring)
-
-	if CipherFail then 
-		warn("Cipher fail.. Incorrect private key")
-	end
-
-	return Str
-end
-
-local rand = math.random(1,999999999) -- 'rand' acts as the salt, which allows us to secure hashes to this current execution session only. So hashes will never be the same between servers for security reasons
-internal.SelfSigned = Console:Cipher(script.Name)
-
--- Create our dictionaries to keep track of all the stuff wanting to use CS.
-internal.RegisteredApps = {}
-internal.RegisteredServices ={} 
-internal.RegisteredDataSpace = {}
-internal.SharedConsoleData = {}
-
-
--- This is a very useful function to track apps by their private key
--- Since only the app knows its private key, we don't need any other identification as we already got all the info
-function internal:KeyToSource(Key, Name) --PATCH: Variables were seperated as per security patch 0013nhb. Before, an attacker could fool CS into executing malicious commands by passing the name instead of the key
-	-- Check registered services based on their private key, these would be the ones kept under this very script.
-	for Service,PossibleKey in pairs(internal.RegisteredServices) do -- Start loop
-		if PossibleKey == Key or Name == Service then -- If PrivateKey matches the Key kept on file
-			return {Service, "Service"} -- We know that since only that service would have that private key, then the userdata info MUST be correct.
-		end  
-	end
-
-	-- Now we're checking the registered apps for matching private keys. These are scripts that have gotten OAuth API access to CS.
-	for Applic,PossibleKey in pairs(internal.RegisteredApps) do -- Start loop
-		if PossibleKey == Key or Applic == Name then -- Chec kif private key matches again
-			return {Applic, "App"} -- Return the application, under the "App" protocol instead of the "Service" one before.
-		end 
-	end
-
-	return URC.NotFound -- Back to tower!
-end
-
-
--- This is our custom print function. It allows us to change how it looks, and monitor activity in the frameowkr.
-function Console.WriteLine(SecurityKey, ...)
-	local ParsedData = {...}
-	local Str = ""
-	local MatchingSector
-	if SecurityKey == internal.SelfSigned then 
-		MatchingSector = script
-		--if not internal.DebugMode then return end
-	else
-		local PossibleMatch = internal:KeyToSource(SecurityKey)
-		if not (PossibleMatch==URC.NotFound) then
-			MatchingSector = PossibleMatch[1]
-		end
-	end
-
-	if MatchingSector then
-		local Prefix 
-		Prefix = "[F]["..tostring(MatchingSector).."]:" -- Prefix
-		-- If client, a different prefix. For organization
-		if internal.Client then
-			Prefix = "[F-L]["..tostring(MatchingSector).."]:"
+        -- Generate the CharsTable if it does not exist yet
+		if not (type(internal.CharsTable)=="table") then 
+			local Generation = GenerateAlphanumericAndSymbolsTable()
+			internal.CharsTable = Generation -- Save to our internal table
 		end
 
-		-- Now we want to loop through all data and condense it into a string so the output handles it.
-		for _,Object in pairs(ParsedData) do
-			Str = Str .." "..tostring(Object)
+		-- Inner function to attempt Key generation
+		local function TryGenerateKey()
+			repeat
+				-- Reset Key to an empty string for each attempt
+				Key = ""
+				-- Build the Key character by character
+				for i = 1, KeyLength do
+					-- Randomly select an index from the charsTable
+					local RandIndex = math.random(#internal.CharsTable)
+					-- Append the character at the random index to the Key
+					Key = Key .. internal.CharsTable[RandIndex]
+				end
+				-- Check if the elapsed time has exceeded the Timeout duration
+				if os.difftime(os.time(), StartTime) > Timeout then
+					-- If Timeout is reached, print a message and return nil
+					console:Write(internal.SelfSign,"Fatal Error: Fusion is unable to generate new keys into memory. System needs to shut down.")
+					return nil
+				end
+				-- Yield the coroutine with the current Key
+				coroutine.yield(Key)
+			-- Continue generating Keys until a unique one is found. We want to add a wait() statement to prevent rare crashes.
+			wait()
+			until not UsedKeys[Key]
+			-- Once a unique Key is found, mark it as used
+			UsedKeys[Key] = true
+			-- Return the unique Key
+			return Key
 		end
 
-		-- Warn() prints in orange text so we know to look for that quicker
-		print(Prefix..Str) 
+		-- Create a coroutine with the inner function
+		local co = coroutine.create(TryGenerateKey)
+		-- Variables to store the status and result of the coroutine
+		local status, result
+		repeat
+			-- Resume the coroutine and capture its status and result
+			status, result = coroutine.resume(co)
+		-- Continue until the coroutine finishes or a result is obtained
+		until status == false or result ~= nil
 
-		-- Send to any internal services that are listening in
-		for _,Push in ipairs(internal.SharedConsoleData) do
-			spawn(function()
-				Push(tostring(MatchingSector), Str)
-			end)
-		end
-	end
+		-- Return the result, which is either a unique Key or nil if Timeout was reached
+		return result
 end
 
-function internal:Print(Data)
-	Console.WriteLine(internal.SelfSigned, string.upper(tostring(Data)))
+internal.SelfSign = console:GenerateKey()
+
+-- Function for apps to terminate their one-time keys using their real key
+function console:TerminateOneTimeKeys(AppRealKey, SpecificKey)
+    -- Verify that the request is coming from the app itself
+    if internal.AppInst[AppRealKey] ~= script then
+        -- Future logic for security software 
+    end
+
+    if SpecificKey then
+        -- Terminate a specific key
+        if internal.OneTimeKeys[SpecificKey] == internal.AppInst[AppRealKey] then
+            internal.OneTimeKeys[SpecificKey] = nil
+        end
+    else
+        -- Terminate all keys for the app
+        for Key, AppInstance in pairs(internal.OneTimeKeys) do
+            if AppInstance == internal.AppInst[AppRealKey] then
+                internal.OneTimeKeys[Key] = nil
+            end
+        end
+    end
 end
 
--- Quick notice for the user if universal response codes are in effect.
-if not ResponseLibrary then
-	internal:Print("This server does not support universal response codes. As such, we have a function in place to downgrade the signal to work for compatibility. [1/2]")
-	internal:Print("Universal response codes are a great way to organize future scripts. You can read up more on it at the Fusion Framework github! [2/2]")
+-- Function to get the current platform/environment
+function console:GetPlatform()
+    if RunService:IsStudio() then
+        if RunService:IsClient() then
+            return "Local"
+        elseif RunService:IsServer() then
+            return "Server"
+        end
+    elseif RunService:IsRunMode() then
+        return "Plugin"
+    else
+        -- Default to 'N/A' if none of the conditions match
+        -- This is a safeguard and should not typically occur
+        return "N/A"
+    end
 end
 
--- This is CS's built in Create() libarry!
--- Roblox built something like this a while ago but it has been proven to be incredibly inefficient, so I remade it the proper way
--- Type = Classname, Parent = Object parent, Data = dictionary of the properties you want. Ie:
--- Console.Create("Part", workspace, { 
---     Name = "Hello";
---     BrickColor = BrickColor.Random();
--- })
-function Console.Create(Type, Parent, Data)
-	if not Type and not Data then return URC.Fault end -- This checks to make sure the data is not malformed, so we know what we're doing
-	local NewObj = Instance.new(Type) -- Create the object using Instance.new()
+-- Function to generate a one-time key for an app using its real key
+function console:GenerateOneTimeKey(AppRealKey)
 
-	-- For this part, we're gonna run through the 'Data' dictionary and each iteration apply that specific value to the property.
-	for Property, Value in pairs(Data) do -- Start loop
-		pcall(function() -- Pcall wrapping in case something doesn't go right, which is often when copying & pasting these API calls everywhere
-			NewObj[Property] = Value -- Set the value if its correct!
-		end)
-	end
+    internal.LastRequestTime = internal.LastRequestTime or {}
 
-	-- Now we will set the parent they they wanted.
-	-- The 'Parent' parameter accepts nil too, so thats why we will also return it at the end. So they can handle it themselves for replication or whatever
-	NewObj.Parent = Parent
-	return NewObj -- Back to station!
+    -- Check for rate limiting
+    if internal.LastRequestTime[AppRealKey] and os.time() - internal.LastRequestTime[AppRealKey] < internal.RequestTimeout then
+        internal:Write(internal.SelfSign, "Request limit exceeded. Please wait before requesting another key.")
+    end
+
+    -- Generate a unique one-time key
+    local OneTimeKey = "OTK-S"..console.GenerateKey()
+
+    -- Store the one-time key with its associated app instance temporarily
+    internal.OneTimeKeys[OneTimeKey] = internal.AppInst[AppRealKey]
+    internal.LastRequestTime[AppRealKey] = os.time()
+
+    -- Set a timer to invalidate the one-time key after a short period
+    delay(internal.KeyValPeriod, function()
+        internal.OneTimeKeys[OneTimeKey] = nil
+    end)
+
+    return OneTimeKey
 end
 
--- Function for setting up OAuth for our built-in services
--- OAuth is the protocol name for the API handler system that CS uses. It uses Public Keys and Private Keys
--- In order to secure API calls. This way we will always know how to verify any requests/whatever based on their
--- kept private key in their memory. 
-function Console.SetupOAuth(Key, API) 
-	local Service = internal:KeyToSource(Key) -- Check the key so we know which service is wanting their API used
-	if not type(Service)=="table" then return Service end -- This will return the URC code in internal:KeyToService(), which is likely to be URC.NotFound
+-- Function to set data for an app
+function console:DataSet(Key, ValName, Val)
+    -- Verify the app's key
+    local AppName = "Unknown"
+    for name, data in pairs(internal.AppKeys) do
+        if data == Key then
+			AppName = name
+            break
+        end
+    end
+    if AppName == "Unknown" then
+        return nil
+    end
 
-	-- Build logic
-	local function Bridge(Data) -- Reusable bridge function
-		local SecurityKey = Data.PrivateKey -- Get the key that sent
-		local Function = Data.Function -- The intended usage so we know where to direct it
-		local FindSource = internal:KeyToSource(SecurityKey)
-		if not (FindSource == URC.NotFound) then -- If key is valid
-			--local Details  
-			--local success, fail = pcall(function()
-				Details = API[Function](nil,Data) -- Second parameter because module limitations, converting it to the right format
-			--end)
-			
-			--if success then
-				return Details
-			--else
-				--Console.WriteLine("Error detected accessing Fusion libraries: "..tostring(fail))
-			--end
-		else
-			internal:Print("OAuth Registration Error: "..FindSource) --Rip 
-		end
+    -- Initialize the scope for the app if it doesn't exist
+    internal.AppDataStorage[AppName] = internal.AppDataStorage[AppName] or {}
+    internal.AppDataStorage[AppName][ValName] = internal.AppDataStorage[AppName][ValName] or 0
 
-	end
+    -- Set the value
+    internal.AppDataStorage[AppName][ValName] = Val
 
-	-- Here is our interesting thread for creating our API's. Let us take this in steps
-
-	--[[ This is regular, synchronous API calls that will run at the same time are your code.
-    These are best for quick calls to the framework that
-	 	a) don't get anything in return
-	 	b) don't need to take up time 
-	 	c) aren't time-sensitive to your variables
-	So for example... _G.Whatever({Function = "Lighting";Mode = "Set";Value = 0})
-	-- ]]
-	_G[Service[1].Name] = function(Data) spawn(function() return Bridge(Data) end) end
-
-	--[[Now this one is asynchronous API calls. These will stop your script from running until CS is done handling your API call.
-	These would be useful for:
-		a) Gamemode cycles
-		b) Loading objects
-	Another example... _G.WhateverAsync({Function = "Gamemode";Mode = "StartCycle"}) and your script will resume after that gamemode cycle is done
-	-- ]]
-	_G[Service[1].Name.."Async"] = function(Data) return Bridge(Data) end
-
-	--[[ For debug synchronous calls
-		This simply just passes debug info to your service. It is up to the server to handle it and how it handles it.
-		Most ones I made will simply output more info when called with debug, to help find errors.
-		Example: _G.WhateverDebug({Function = "Lighting";Mode = "Set";Value = 0})
-	--]]
-	_G[Service[1].Name.."Debug"] = function(Data) Data["Debug"] = true spawn(function() return Bridge(Data) end) end
-
-	-- The same thing as above but asynchronous.
-	-- _G.WhateverDebugAsync({Function = "Lighting";Mode = "Set";Value = 0})
-	_G[Service[1].Name.."DebugAsync"] = function(Data) Data["Debug"] = true spawn(function() return Bridge(Data) end) end
+	return true
 end
 
--- Here is where we are going to setup registrations for external applications wanting to use API powered by CS.
-_G["SetupOAuth"] = function(Script)
-	if URC.NotFound == (internal:KeyToSource(nil, Script.Name)) then
-		local Key = Console:Cipher(script.Name.."_app_"..math.random()..script.Parent.Name)
-		internal.RegisteredApps[Script.Name] = Key
-		return Key
-	else
-		return URC.Fault
-	end
+-- Function to get data for an app
+function console:DataGet(Key, ValName)
+    -- Verify the app's key
+    local AppName = "Unknown"
+    for name, data in pairs(internal.AppKeys) do
+        if data == Key then
+            AppName = name
+            break
+        end
+    end
+    if AppName == "Unknown" then
+        return nil
+    end
+
+    -- Retrieve the value
+    if internal.AppDataStorage[AppName][ValName] then
+        return internal.AppDataStorage[AppName][ValName]
+    else
+        -- Return nil if the value doesn't exist
+        return nil
+    end
 end
 
--- BitModder is the protocol for writing & reading data. This is a secure function in order to protect sensitive information inside the core of CS. This isn't required to be used but is recommended. 
-function Console.BitModder(SecurityKey, Direction, Keyspot, Value)
-	if not (SecurityKey and Direction  and Keyspot) then  return URC.NotFound end
-	local Source = internal:KeyToSource(SecurityKey)
+-- Function to write log entries
+function console:Write(Key, ...)
+    -- Check if the key is the framework's internal self-sign key
+    local AppName
+    if Key == internal.SelfSign then
+        -- Process the rest of the parameters as before
+		AppName = "Fusion"
+        -- ...
+    else
+        -- The message is from an app, find the app name using the key
+        AppName = "Unknown"
+        for name, data in pairs(internal.AppKeys) do
+            if data.Key == Key then
+                AppName = name
+                break
+            end
+        end
+        -- If no app is found, the key is invalid
+        if AppName == "Unknown" then
+			return
+        end
+    end
 
-	if not (Source == URC.NotFound) then
-		if not internal.RegisteredDataSpace[SecurityKey] then internal.RegisteredDataSpace[SecurityKey] = {} end
-		local ExistingDataModel = internal.RegisteredDataSpace[SecurityKey]
+    -- Convert all additional parameters to strings and concatenate them
+    local MessageParts = {...}
+    for i, v in ipairs(MessageParts) do
+        MessageParts[i] = tostring(v)
+    end
+    local Message = table.concat(MessageParts, " ")
 
-		if Direction == "get" then 
-			return ExistingDataModel[Keyspot]
+    -- Create the log entry
+    local LogEntry = "[F][" .. console:GetPlatform() .. "][" .. AppName .. "]: " .. Message
+	print(LogEntry) -- Improve in future, but this just prints framwework output to the Roblox output
 
+    -- Prepend the new log entry to ensure newer first
+    table.insert(internal.LogEntries, 1, LogEntry)
 
-		elseif (Direction == "set" or 1) and (Value~=nil) then
-			ExistingDataModel[Keyspot] = Value
-			return URC.Valid
-
-		else
-			return URC.InvalidData
-		end
-	else
-		return URC.AccessDenied
-	end
+    -- Return the updated log entries table
+    return internal.LogEntries 
 end
 
-function Console.ReadActivity(SecurityKey, Fcn)
-	if not (internal:KeyToSource(SecurityKey) == URC.NotFound) then 
-		if #internal.SharedConsoleData > 5 then return URC.Busy end
-		internal:Print("Granted root console permissions to '"..Services.Name.."."..internal:KeyToSource(SecurityKey)[1].Name.."'.")
+-- Function to authenticate an app and provide it with a unique key and console table
+function external:Authenticate(App, AppData)
+    if typeof(AppData) == "table" and AppData.Name and AppData.Version and AppData.Description and AppData.Console then
+        local Key = console:GenerateKey()
 
-		table.insert(internal.SharedConsoleData, Fcn)
-	end
+        internal.AppKeys[AppData.Name] = Key
+		internal.AppInst[Key] = App
+		console:Write(internal.SelfSign, "Launched app: '"..AppData.Name.."' v"..AppData.Version..".")
+        -- Pass the framework's console table along with the key
+
+		return Key, console, external
+    else
+        console:Write(internal.SelfSign, "Invalid app data provided.")
+    end
 end
 
-function Console.CheckDependancy(name)
-	local PossibleMatch = Services:FindFirstChild(name)
+function external:VerifyIdentity(OneTimeKey)
+    -- Retrieve the app instance using the one-time key
+    local AppInstance = internal.OneTimeKeys[OneTimeKey]
 
-	if PossibleMatch then
-		return true 
-	else
-		return false
-	end
+    if AppInstance and (string.sub(OneTimeKey, 1, 5) == "OTK-S") then
+        -- Invalidate the one-time key
+        internal.OneTimeKeys[OneTimeKey] = nil
+        -- Return the app instance associated with the one-time key
+        return AppInstance
+    else
+        -- The key is invalid or has expired
+        return false, "Invalid or expired one-time key."
+    end
 end
 
-internal:Print("S T A R T I N G    . . .") -- Just for fun
-internal:Print("SYSTEM PROCEEDING WITH STARTUP, DETECTED "..tostring(#Services:GetChildren()) .." UNINSTALLED SERVICES.")
-
-for _,Service in ipairs(Services:GetChildren()) do -- Loop through all the modules
-	local Count = tick() -- Keep track of the time for installation
-
-	spawn(function() -- Start new thread
-		local Activation -- Establish activation variable
-		local Key = Console:Cipher(Service.Name) -- Create new cryptographic hash for verification
-		internal.RegisteredServices[Service] = Key -- Save the private key in our memory, so we know to verify it later
-
-		spawn(function() Activation = require(Service):initialize(Key, Console) end) -- Spawn this in a different thread, so we can keep track of its behaviour
-		local SubCount = 0 -- Gotta keep track again!
-		repeat wait(.2) -- Start loop
-			SubCount = SubCount + 1	-- Start keeping track of timeout data
-			if SubCount == 45 then internal:Print("'"..Services.Name.."."..Service.Name.."' is not responding. The installation will be halted if it does not respond shortly.") end
-		until SubCount >= 75 or Activation -- Kill loop
-
-		local TimeSpent = tick() - Count -- Calculate time spent 
-		if Activation then -- Base our decision of the fate of the module whether it responded back or not, for security/compatibility reasons.
-			pcall(function()Services[tostring(Service)] = require(Service) end)  -- Add the module's libraries to our Services{} table
-			local Str = "server"
-			if internal.Client then Str = "client" end
-
-			internal:Print("Successfully installed '"..Services.Name.."."..Service.Name.."' to the "..Str.." in "..string.sub(tostring(TimeSpent), 1, 4).." sec. ")
-			
-		else 
-			internal:Print("Failed to install '"..tostring(Services.Name).."."..tostring(Service.Name).."' (Err: "..tostring(URC.Timeout)..".) For security, this service has been destroyed.") -- Print out our error
-			Service:Destroy() -- Get rid of the service
-		end
-	end)
+-- Function to call a function on the app's console table safely
+function external:Post(AppName, Key, FunctionName, ...)
+    if internal:VerifyKey(AppName, Key) then
+        local AppConsole = internal.AppKeys[AppName].console
+        if AppConsole and AppConsole[FunctionName] then
+            -- Use pcall to safely call the function
+            local Status, Result = pcall(AppConsole[FunctionName], ...)
+            if not Status then
+                console:Write(internal.SelfSign,"Error calling function: " .. tostring(Result))
+            end
+            return Result
+        else
+            console:Write(internal.SelfSign,"Function does not exist on the app's console table.")
+        end
+    else
+        console:Write(internal.SelfSign, "Access denied. Invalid key.")
+    end
 end
 
+-- Return the 'external' table when the module is required
+return external
