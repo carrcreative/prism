@@ -3,14 +3,24 @@ local external          = {} -- Functions accessable to every server script
 local internal          = {} -- Functions accessable only within Fusion's core, these are the most sensitive functions.
 local console           = {} -- Functions accessable by apps compatible with Fusion, only after they 
 
+local RunService = game:GetService("RunService")
+
 internal.LogEntries     = {}
 internal.AppDataStorage = {}
 internal.AppKeys        = {}
 internal.AppInst        = {}
 internal.OneTimeKeys	= {}
+internal.RequestTimeout = 10 -- Time in seconds to wait before allowing another request from the same app
+internal.KeyValPeriod   = 30 -- Time in seconds for which a one-time key is valid
+
+
+-- Function to verify the app's key before providing access to console functions
+function internal:VerifyKey(AppName, Key)
+    return internal.AppKeys[AppName].Key == Key
+end
 
 -- This simple function returns the table, it is up to the calling function to save this properly. 
-function internal:GenerateKey(ForcedKeyLength, ForcedTimeout)
+function console:GenerateKey(ForcedKeyLength, ForcedTimeout)
 	-- Initialize an empty Key string
 		local Key = ""
 		-- Table to keep track of used Keys to ensure uniqueness
@@ -52,10 +62,10 @@ function internal:GenerateKey(ForcedKeyLength, ForcedTimeout)
 			return chars
 		end
 
+        -- Generate the CharsTable if it does not exist yet
 		if not (type(internal.CharsTable)=="table") then 
 			local Generation = GenerateAlphanumericAndSymbolsTable()
-			internal.CharsTable = Generation
-			console:Write(internal.SelfSign,"Performed first-time generation of our alphanumeric/symbols database")
+			internal.CharsTable = Generation -- Save to our internal table
 		end
 
 		-- Inner function to attempt Key generation
@@ -101,32 +111,70 @@ function internal:GenerateKey(ForcedKeyLength, ForcedTimeout)
 		return result
 end
 
--- Function to generate a one-time key for an app
-function console:GenerateOneTimeKey(AppName)
-    -- Generate a unique one-time key
-    local OneTimeKey = "BK_"..internal:GenerateKey()
+internal.SelfSign = console:GenerateKey()
 
-    -- Store the one-time key with its associated app data temporarily
-    internal.OneTimeKeys[OneTimeKey] = internal.AppInst[AppName]
-    -- Set a timer to invalidate the one-time key after a short period
-    delay(30, function() -- Invalidate after 30 seconds
-        internal.OneTimeKeys[OneTimeKey] = nil
-    end)
-    return OneTimeKey
+-- Function for apps to terminate their one-time keys using their real key
+function console:TerminateOneTimeKeys(AppRealKey, SpecificKey)
+    -- Verify that the request is coming from the app itself
+    if internal.AppInst[AppRealKey] ~= script then
+        -- Future logic for security software 
+    end
+
+    if SpecificKey then
+        -- Terminate a specific key
+        if internal.OneTimeKeys[SpecificKey] == internal.AppInst[AppRealKey] then
+            internal.OneTimeKeys[SpecificKey] = nil
+        end
+    else
+        -- Terminate all keys for the app
+        for Key, AppInstance in pairs(internal.OneTimeKeys) do
+            if AppInstance == internal.AppInst[AppRealKey] then
+                internal.OneTimeKeys[Key] = nil
+            end
+        end
+    end
 end
 
--- Function to verify an app's identity using a one-time key
-function console:VerifyIdentity(OneTimeKey)
-    -- Retrieve the app data using the one-time key
-    local AppData = internal.OneTimeKeys[OneTimeKey]
-    if AppData and (string.sub(OneTimeKey, 0, 3) == "BK_") then
-		print(OneTimeKey)
-		internal.OneTimeKeys[OneTimeKey] = nil
-        return AppData
+-- Function to get the current platform/environment
+function console:GetPlatform()
+    if RunService:IsStudio() then
+        if RunService:IsClient() then
+            return "Local"
+        elseif RunService:IsServer() then
+            return "Server"
+        end
+    elseif RunService:IsRunMode() then
+        return "Plugin"
     else
-        -- The key is invalid or has expired
-        return false
+        -- Default to 'N/A' if none of the conditions match
+        -- This is a safeguard and should not typically occur
+        return "N/A"
     end
+end
+
+-- Function to generate a one-time key for an app using its real key
+function console:GenerateOneTimeKey(AppRealKey)
+
+    internal.LastRequestTime = internal.LastRequestTime or {}
+
+    -- Check for rate limiting
+    if internal.LastRequestTime[AppRealKey] and os.time() - internal.LastRequestTime[AppRealKey] < internal.RequestTimeout then
+        internal:Write(internal.SelfSign, "Request limit exceeded. Please wait before requesting another key.")
+    end
+
+    -- Generate a unique one-time key
+    local OneTimeKey = "OTK-S"..console.GenerateKey()
+
+    -- Store the one-time key with its associated app instance temporarily
+    internal.OneTimeKeys[OneTimeKey] = internal.AppInst[AppRealKey]
+    internal.LastRequestTime[AppRealKey] = os.time()
+
+    -- Set a timer to invalidate the one-time key after a short period
+    delay(internal.KeyValPeriod, function()
+        internal.OneTimeKeys[OneTimeKey] = nil
+    end)
+
+    return OneTimeKey
 end
 
 -- Function to set data for an app
@@ -197,8 +245,6 @@ function console:Write(Key, ...)
         if AppName == "Unknown" then
 			return
         end
-        -- Process the rest of the parameters as before
-        -- ...
     end
 
     -- Convert all additional parameters to strings and concatenate them
@@ -209,8 +255,8 @@ function console:Write(Key, ...)
     local Message = table.concat(MessageParts, " ")
 
     -- Create the log entry
-    local LogEntry = "[F][" .. internal:ReturnEnv() .. "][" .. AppName .. "]: " .. Message
-	print(LogEntry)
+    local LogEntry = "[F][" .. console:GetPlatform() .. "][" .. AppName .. "]: " .. Message
+	print(LogEntry) -- Improve in future, but this just prints framwework output to the Roblox output
 
     -- Prepend the new log entry to ensure newer first
     table.insert(internal.LogEntries, 1, LogEntry)
@@ -219,31 +265,35 @@ function console:Write(Key, ...)
     return internal.LogEntries 
 end
 
-function internal:ReturnEnv() 
-	return "Server"
-end
-
--- Table to store app keys and their respective console tables for verification
-internal.SelfSign = internal:GenerateKey(64)
-
 -- Function to authenticate an app and provide it with a unique key and console table
 function external:Authenticate(App, AppData)
     if typeof(AppData) == "table" and AppData.Name and AppData.Version and AppData.Description and AppData.Console then
-        local Key = internal:GenerateKey()
+        local Key = console:GenerateKey()
+
         internal.AppKeys[AppData.Name] = Key
-		internal.AppInst[AppData.Name] = App
+		internal.AppInst[Key] = App
 		console:Write(internal.SelfSign, "Launched app: '"..AppData.Name.."' v"..AppData.Version..".")
         -- Pass the framework's console table along with the key
 
-		return Key, console
+		return Key, console, external
     else
         console:Write(internal.SelfSign, "Invalid app data provided.")
     end
 end
 
--- Function to verify the app's key before providing access to console functions
-function internal:VerifyKey(AppName, Key)
-    return internal.AppKeys[AppName].Key == Key
+function external:VerifyIdentity(OneTimeKey)
+    -- Retrieve the app instance using the one-time key
+    local AppInstance = internal.OneTimeKeys[OneTimeKey]
+
+    if AppInstance and (string.sub(OneTimeKey, 1, 5) == "OTK-S") then
+        -- Invalidate the one-time key
+        internal.OneTimeKeys[OneTimeKey] = nil
+        -- Return the app instance associated with the one-time key
+        return AppInstance
+    else
+        -- The key is invalid or has expired
+        return false, "Invalid or expired one-time key."
+    end
 end
 
 -- Function to call a function on the app's console table safely
