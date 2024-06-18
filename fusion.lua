@@ -1,3 +1,18 @@
+
+--[[
+
+8888888888                d8b                   
+888                       Y8P                   
+888                                             
+8888888 888  888 .d8888b  888  .d88b.  88888b.  
+888     888  888 88K      888 d88""88b 888 "88b 
+888     888  888 "Y8888b. 888 888  888 888  888 
+888     Y88b 888      X88 888 Y88..88P 888  888 
+888      "Y88888  88888P' 888  "Y88P"  888  888 
+                                                
+]]
+
+
 -- These are three security clearance levels we want to create
 local external          = {} -- Functions accessable to every server script
 local internal          = {} -- Functions accessable only within Fusion's core, these are the most sensitive functions.
@@ -5,19 +20,118 @@ local console           = {} -- Functions accessable by apps compatible with Fus
 
 local RunService = game:GetService("RunService")
 
+-- Protected internal registry 
 internal.LogEntries     = {}
 internal.AppDataStorage = {}
+internal.AvailableAPI   = {}
 internal.AppKeys        = {}
 internal.AppInst        = {}
+internal.AppLibs        = {}
 internal.OneTimeKeys	= {}
 internal.RequestTimeout = 10 -- Time in seconds to wait before allowing another request from the same app
 internal.KeyValPeriod   = 30 -- Time in seconds for which a one-time key is valid
+internal.LocalPlayer    = nil
+internal.Version 		= "0.3"
+
+internal.FlagConfiguration = {
+	AllowInsecureConnections = false; -- By default, only apps inside the Fusion security network can utilize each other. Setting this to false will allow app functions to be used from any Script	
+	
+}
 
 
 -- Function to verify the app's key before providing access to console functions
-function internal:VerifyKey(AppName, Key)
-    return internal.AppKeys[AppName].Key == Key
+function internal:AppFgpt(CondensedData)
+	--[[
+		Our new app verification function! 
+		Replacing internal:Verify() 
+	
+		6/18/2024
+	]]
+	
+	local ModeLogic = {
+		GNFK = function() -- Get Name From Key 
+			local Key = CondensedData.Key 
+			
+			for Name, AppKey in pairs(internal.AppKeys) do
+				wait() -- Update this for custom heartbeat in future 
+				if AppKey == Key then 
+					return Name 
+				end
+			end
+			return nil
+		end,
+		
+		GKFN = function() -- Get Key From Name
+			return internal.AppKeys[CondensedData.Name] 
+		end,
+		
+	}
+	
+	-- Checking for proper input!
+	if not CondensedData or not (type(CondensedData)=="table") or not (CondensedData.Mode) then return end 
+	
+	local AppKey = CondensedData.Key
+	local AppName = CondensedData.Name
+	local Mode = CondensedData.Mode 
+	
+	if ModeLogic[Mode] then 
+		return ModeLogic[Mode]()
+	else
+		error("internal:AppFgpt() failure: Incorrect ModeLogic")
+	end
+	
 end
+
+function internal:ForceAppName(Key)
+	for AppName, intKey in pairs (internal.AppKeys) do
+		if intKey == Key then 
+			return AppName
+		end
+	end
+	return nil
+end
+
+-- Function to write log entries
+function console:Write(Key, ...)
+	-- Check if the key is the framework's internal self-sign key
+	local AppName
+	if Key == internal.SelfSign then
+		-- Process the rest of the parameters as before
+		AppName = "Fusion"
+		-- ...
+	else
+		-- The message is from an app, find the app name using the key
+		AppName = "Unknown"
+		for name, data in pairs(internal.AppKeys) do
+			if data.Key == Key then
+				AppName = name
+				break
+			end
+		end
+		-- If no app is found, the key is invalid
+		if AppName == "Unknown" then
+			return
+		end
+	end
+
+	-- Convert all additional parameters to strings and concatenate them
+	local MessageParts = {...}
+	for i, v in ipairs(MessageParts) do
+		MessageParts[i] = tostring(v)
+	end
+	local Message = table.concat(MessageParts, " ")
+
+	-- Create the log entry
+	local LogEntry = "[F][" .. console:GetPlatform() .. "][" .. AppName .. "]: " .. Message
+	print(LogEntry) -- Improve in future, but this just prints framwework output to the Roblox output
+
+	-- Prepend the new log entry to ensure newer first
+	table.insert(internal.LogEntries, 1, LogEntry)
+
+	-- Return the updated log entries tables
+	return internal.LogEntries 
+end
+
 
 -- This simple function returns the table, it is up to the calling function to save this properly. 
 function console:GenerateKey(ForcedKeyLength, ForcedTimeout)
@@ -224,58 +338,38 @@ function console:DataGet(Key, ValName)
     end
 end
 
--- Function to write log entries
-function console:Write(Key, ...)
-    -- Check if the key is the framework's internal self-sign key
-    local AppName
-    if Key == internal.SelfSign then
-        -- Process the rest of the parameters as before
-		AppName = "Fusion"
-        -- ...
-    else
-        -- The message is from an app, find the app name using the key
-        AppName = "Unknown"
-        for name, data in pairs(internal.AppKeys) do
-            if data.Key == Key then
-                AppName = name
-                break
-            end
-        end
-        -- If no app is found, the key is invalid
-        if AppName == "Unknown" then
-			return
-        end
-    end
-
-    -- Convert all additional parameters to strings and concatenate them
-    local MessageParts = {...}
-    for i, v in ipairs(MessageParts) do
-        MessageParts[i] = tostring(v)
-    end
-    local Message = table.concat(MessageParts, " ")
-
-    -- Create the log entry
-    local LogEntry = "[F][" .. console:GetPlatform() .. "][" .. AppName .. "]: " .. Message
-	print(LogEntry) -- Improve in future, but this just prints framwework output to the Roblox output
-
-    -- Prepend the new log entry to ensure newer first
-    table.insert(internal.LogEntries, 1, LogEntry)
-
-    -- Return the updated log entries table
-    return internal.LogEntries 
-end
-
 -- Function to authenticate an app and provide it with a unique key and console table
-function external:Authenticate(App, AppData)
-    if typeof(AppData) == "table" and AppData.Name and AppData.Version and AppData.Description and AppData.Console then
-        local Key = console:GenerateKey()
+function external:Authenticate(App, AppData, LocPlyr)
+    if typeof(AppData) == "table" and AppData.Version and AppData.Description and AppData.API and App then
+		
+		local AppAPI = AppData.API
+				
+		
+        -- Make sure we have an updated player variable for local setups 
+        if (console:GetPlatform() == "Client") and (not internal.LocalPlayer) then 
+            --print(tostring(LocPlyr),"This should be the local player name")
+            internal.LocalPlayer = LocPlyr
+		end
 
-        internal.AppKeys[AppData.Name] = Key
-		internal.AppInst[Key] = App
-		console:Write(internal.SelfSign, "Launched app: '"..AppData.Name.."' v"..AppData.Version..".")
+        local key = console:GenerateKey()
+        internal.AppKeys[App.Name] = key
+		internal.AppInst[key] = App
+		internal.AppLibs[App.Name] = AppAPI
+				
+		local APIPackage = {
+			Key = key,
+			AppAPI = console,
+			External = external
+		}
+	
+
+       
+
+
+        console:Write(internal.SelfSign, "Launched app: '"..AppData.FriendlyName.."["..string.lower(App.Name).."-".. string.lower(console:GetPlatform()) .."]' v"..AppData.Version..".")
         -- Pass the framework's console table along with the key
 
-		return Key, console, external
+		return APIPackage
     else
         console:Write(internal.SelfSign, "Invalid app data provided.")
     end
@@ -297,23 +391,41 @@ function external:VerifyIdentity(OneTimeKey)
 end
 
 -- Function to call a function on the app's console table safely
-function external:Post(AppName, Key, FunctionName, ...)
-    if internal:VerifyKey(AppName, Key) then
-        local AppConsole = internal.AppKeys[AppName].console
-        if AppConsole and AppConsole[FunctionName] then
-            -- Use pcall to safely call the function
-            local Status, Result = pcall(AppConsole[FunctionName], ...)
-            if not Status then
-                console:Write(internal.SelfSign,"Error calling function: " .. tostring(Result))
-            end
-            return Result
-        else
-            console:Write(internal.SelfSign,"Function does not exist on the app's console table.")
-        end
-    else
-        console:Write(internal.SelfSign, "Access denied. Invalid key.")
-    end
+function external:Post(ScriptOrKey, AppName, FunctionName, ...)
+		
+	local AppConsole  = internal.AppLibs[AppName]
+	
+	local KeyFromName = internal:AppFgpt({
+		Mode = "GKFN"; 
+		Name = AppName
+	})
+		
+	-- First, let's decide which method we're going todo
+	--if type(ScriptOrKey) == "string" and string.len(ScriptOrKey) <= 128 then
+		-- For this, we want to verify that the posting script is actually a keyholder
+		
+		local APIKey = internal.AppKeys[AppName]
+		local APIName = internal:ForceAppName(APIKey)
+		local AppConsole  = internal.AppLibs[AppName]
+		local Result = internal:AppFgpt({
+			Mode = "GNFK"; 
+			Key = ScriptOrKey
+		})
+	
+		
+	if Result or (internal.FlagConfiguration.AllowInsecureConnections) then 
+		-- Now that we've verified the key, let's check if the app exists
+		if AppConsole then -- Hurray!
+			local Status, Result = pcall(AppConsole[FunctionName], ...)
+			
+			if (not Status) then
+				console:Write(internal.SelfSign,"Error calling function: " .. tostring(Result))
+			end
+			
+			return Result
+		end				
+	end
 end
 
--- Return the 'external' table when the module is required
+-- Return the 'external' table when the module is required 
 return external
