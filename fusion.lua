@@ -35,7 +35,6 @@ internal.Version 		= "0.3"
 
 internal.FlagConfiguration = {
 	AllowInsecureConnections = false; -- By default, only apps inside the Fusion security network can utilize each other. Setting this to false will allow app functions to be used from any Script	
-	
 }
 
 
@@ -91,8 +90,33 @@ function internal:ForceAppName(Key)
 	return nil
 end
 
+function internal:ValidateVersionString(str)
+	-- Condense the string to no more than 5 characters
+	local condensedStr = string.sub(str, 1, 5)
+
+	-- Initialize a counter for lowercase letters
+	local lowerCaseCount = 0
+
+	-- Check each character to ensure it's a number, period, or one lowercase letter
+	for i = 1, #condensedStr do
+		local char = string.sub(condensedStr, i, i)
+		if char:match("%l") then
+			lowerCaseCount = lowerCaseCount + 1
+			-- If more than one lowercase letter is found, return false
+			if lowerCaseCount > 1 then
+				return false
+			end
+		elseif not (char:match("%d") or char == ".") then
+			return false
+		end
+	end
+
+	return condensedStr
+end
+
 -- Function to write log entries
 function console:Write(Key, ...)
+	
 	-- Check if the key is the framework's internal self-sign key
 	local AppName
 	if Key == internal.SelfSign then
@@ -101,13 +125,11 @@ function console:Write(Key, ...)
 		-- ...
 	else
 		-- The message is from an app, find the app name using the key
-		AppName = "Unknown"
-		for name, data in pairs(internal.AppKeys) do
-			if data.Key == Key then
-				AppName = name
-				break
-			end
-		end
+		AppName = internal:AppFgpt({
+			Mode = "GNFK"; 
+			Key = Key
+		})
+		
 		-- If no app is found, the key is invalid
 		if AppName == "Unknown" then
 			return
@@ -122,8 +144,8 @@ function console:Write(Key, ...)
 	local Message = table.concat(MessageParts, " ")
 
 	-- Create the log entry
-	local LogEntry = "[F][" .. console:GetPlatform() .. "][" .. AppName .. "]: " .. Message
-	print(LogEntry) -- Improve in future, but this just prints framwework output to the Roblox output
+	local LogEntry = "[F][" .. console:GetPlatform() .. "][" .. (AppName or "???" ) .. "]: " .. tostring(Message)
+	warn(LogEntry) -- Improve in future, but this just prints framwework output to the Roblox output
 
 	-- Prepend the new log entry to ensure newer first
 	table.insert(internal.LogEntries, 1, LogEntry)
@@ -340,16 +362,10 @@ end
 
 -- Function to authenticate an app and provide it with a unique key and console table
 function external:Authenticate(App, AppData, LocPlyr)
-    if typeof(AppData) == "table" and AppData.Version and AppData.Description and AppData.API and App then
+	local ValVS = internal:ValidateVersionString(AppData.Version)
+	if typeof(AppData) == "table" and AppData.Version and ValVS and AppData.Description and AppData.API and App then
 		
 		local AppAPI = AppData.API
-				
-		
-        -- Make sure we have an updated player variable for local setups 
-        if (console:GetPlatform() == "Client") and (not internal.LocalPlayer) then 
-            --print(tostring(LocPlyr),"This should be the local player name")
-            internal.LocalPlayer = LocPlyr
-		end
 
         local key = console:GenerateKey()
         internal.AppKeys[App.Name] = key
@@ -361,17 +377,13 @@ function external:Authenticate(App, AppData, LocPlyr)
 			AppAPI = console,
 			External = external
 		}
-	
 
-       
-
-
-        console:Write(internal.SelfSign, "Launched app: '"..AppData.FriendlyName.."["..string.lower(App.Name).."-".. string.lower(console:GetPlatform()) .."]' v"..AppData.Version..".")
+		console:Write(internal.SelfSign, "Launched app: '"..AppData.FriendlyName.."["..string.lower(App.Name).."-".. string.lower(console:GetPlatform()) .."]' v"..tostring(ValVS))
         -- Pass the framework's console table along with the key
 
 		return APIPackage
-    else
-        console:Write(internal.SelfSign, "Invalid app data provided.")
+	else
+        console:Write(internal.SelfSign, "Launch of '"..App.Name.."-"..string.lower(console:GetPlatform()).."'' has been blocked because of compatibility errors.")
     end
 end
 
@@ -392,7 +404,6 @@ end
 
 -- Function to call a function on the app's console table safely
 function external:Post(ScriptOrKey, AppName, FunctionName, ...)
-		
 	local AppConsole  = internal.AppLibs[AppName]
 	
 	local KeyFromName = internal:AppFgpt({
@@ -415,9 +426,10 @@ function external:Post(ScriptOrKey, AppName, FunctionName, ...)
 		
 	if Result or (internal.FlagConfiguration.AllowInsecureConnections) then 
 		-- Now that we've verified the key, let's check if the app exists
+
 		if AppConsole then -- Hurray!
 			local Status, Result = pcall(AppConsole[FunctionName], ...)
-			
+
 			if (not Status) then
 				console:Write(internal.SelfSign,"Error calling function: " .. tostring(Result))
 			end
