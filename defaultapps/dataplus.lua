@@ -1,10 +1,9 @@
 -- Importing the Fusion framework from the ReplicatedStorage
-local FusionFramework = require(game.ReplicatedStorage:WaitForChild("Fusion"))
+local FusionFramework = require(game.ReplicatedStorage.Shared:WaitForChild("Fusion"))
 
 -- Configuration settings for DataPlus
 local Config = {
 	LudacrisMode = false, -- If true, bypasses caching and pulls directly from DataStore
-	DisableBackupService = false, -- If true, disables the backup service
 	BackupInterval = 200, -- Time in seconds between each backup
 }
 
@@ -48,10 +47,8 @@ end
 function DataPlus:SetData(Key, Value)
 	UpdateQueue[Key] = Value
 	cache[Key] = Value
-	if not Config.DisableBackupService then
-		internal:SaveVersion(Key, Value)
-		return true 
-	end
+	internal:SaveVersion(Key, Value)
+	return true 
 end
 
 -- Saves a new version of the data for rollback purposes
@@ -94,7 +91,7 @@ local function BatchUpdateDataStore()
 			end
 			UpdateQueue[Key] = nil
 		end
-		Write("DataPlus batch upload completed")
+		Write("Data batch upload completed")
 	end
 end
 
@@ -103,9 +100,9 @@ function internal:AuthenticateWithFusion(AppData)
 	local APIPackage = FusionFramework:Authenticate(script, AppData)
 	internal.PrivateKey = APIPackage.Key
 	internal.AppAPI = APIPackage.AppAPI
-
-	Write("DataPlus daemon has been started")
-end
+	
+	Write("You are running", AppData.FriendlyName, "v", AppData.Version)
+	end
 
 -- Initiates the batch update process at intervals defined in Config
 spawn(function()
@@ -116,10 +113,10 @@ end)
 
 -- AppData for DataPlus, containing metadata
 local AppData = {
-	Version = "0.85b",
+	Version = "0.95b",
 	Description = "DataPlus Service",
 	API = DataPlus,
-	FriendlyName = "DataPlus"
+	FriendlyName = "Data+Fusion"
 }
 
 -- Ensures DataPlus performs a final batch update before the game closes
