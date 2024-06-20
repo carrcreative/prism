@@ -30,23 +30,15 @@ internal.AppLibs        = {}
 internal.OneTimeKeys	= {}
 internal.RequestTimeout = 10 -- Time in seconds to wait before allowing another request from the same app
 internal.KeyValPeriod   = 30 -- Time in seconds for which a one-time key is valid
-internal.LocalPlayer    = nil
-internal.Version 	= "0.85b"
+internal.Version 		= "0.85b"
 
 internal.FlagConfiguration = {
-	AllowInsecureConnections = false; -- By default, only apps inside the Fusion security network can utilize each other. Setting this to false will allow app functions to be used from any Script	
+	AllowInsecureConnections = true; -- By default, only apps inside the Fusion security network can utilize each other. Setting this to false will allow app functions to be used from any Script	
 }
 
 
 -- Function to verify the app's key before providing access to console functions
 function internal:AppFgpt(CondensedData)
-	--[[
-		Our new app verification function! 
-		Replacing internal:Verify() 
-	
-		6/18/2024
-	]]
-	
 	local ModeLogic = {
 		GNFK = function() -- Get Name From Key 
 			local Key = CondensedData.Key 
@@ -314,7 +306,7 @@ function console:GenerateOneTimeKey(AppRealKey)
 end
 
 -- Function to set data for an app
-function console:DataSet(Key, ValName, Val)
+function console:BitSet(Key, ValName, Val)
     -- Verify the app's key
     local AppName = "Unknown"
     for name, data in pairs(internal.AppKeys) do
@@ -338,7 +330,7 @@ function console:DataSet(Key, ValName, Val)
 end
 
 -- Function to get data for an app
-function console:DataGet(Key, ValName)
+function console:BitGet(Key, ValName)
     -- Verify the app's key
     local AppName = "Unknown"
     for name, data in pairs(internal.AppKeys) do
@@ -361,7 +353,7 @@ function console:DataGet(Key, ValName)
 end
 
 -- Function to authenticate an app and provide it with a unique key and console table
-function external:Authenticate(App, AppData, LocPlyr)
+function external:Authenticate(App, AppData)
 	local ValVS = internal:ValidateVersionString(AppData.Version)
 	if typeof(AppData) == "table" and AppData.Version and ValVS and AppData.Description and AppData.API and App then
 		
@@ -370,7 +362,7 @@ function external:Authenticate(App, AppData, LocPlyr)
         local key = console:GenerateKey()
         internal.AppKeys[App.Name] = key
 		internal.AppInst[key] = App
-		internal.AppLibs[App.Name] = AppAPI
+		internal.AppLibs[App.Name] = AppData.API
 				
 		local APIPackage = {
 			Key = key,
@@ -422,19 +414,16 @@ function external:Post(ScriptOrKey, AppName, FunctionName, ...)
 			Mode = "GNFK"; 
 			Key = ScriptOrKey
 		})
-	
-		
-	if Result or (internal.FlagConfiguration.AllowInsecureConnections) then 
+
+		if Result or (internal.FlagConfiguration.AllowInsecureConnections) then 
 		-- Now that we've verified the key, let's check if the app exists
 
 		if AppConsole then -- Hurray!
 			local Status, Result = pcall(AppConsole[FunctionName], ...)
-
 			if (not Status) then
 				console:Write(internal.SelfSign,"Error calling function: " .. tostring(Result))
 			end
-			
-			return Result
+			return Status, Result 
 		end				
 	end
 end
