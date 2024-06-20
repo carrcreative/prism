@@ -31,7 +31,7 @@ internal.OneTimeKeys	= {}
 internal.RequestTimeout = 10 -- Time in seconds to wait before allowing another request from the same app
 internal.KeyValPeriod   = 30 -- Time in seconds for which a one-time key is valid
 internal.LocalPlayer    = nil
-internal.Version 		= "0.3"
+internal.Version 	= "0.85b"
 
 internal.FlagConfiguration = {
 	AllowInsecureConnections = false; -- By default, only apps inside the Fusion security network can utilize each other. Setting this to false will allow app functions to be used from any Script	
