@@ -13,7 +13,8 @@ An open-source project
 > [!CAUTION]
 > This is pre-release software, and it should be used for development purposes only. 
 
-
+Find latest release: 
+https://github.com/dylancarr99/fusion/releases/tag/pre-release
 
 ## Introduction 
 Fusion is a security-centric framework that streamlines the development process on Roblox, offering developers a seamless and secure way to manage their game’s operations. It emphasizes ease of use, allowing creators to implement robust features without compromising on safety. Fusion’s architecture is designed to protect data integrity and provide a trustworthy environment for both developers and players. It’s an indispensable tool for building resilient and secure Roblox applications with confidence.
