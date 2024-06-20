@@ -76,7 +76,7 @@ function internal:AppFgpt(CondensedData)
 	if ModeLogic[Mode] then 
 		return ModeLogic[Mode]()
 	else
-		error("internal:AppFgpt() failure: Incorrect ModeLogic")
+		error("Fatal internal:AppFgpt() failure: Incorrect ModeLogic")
 	end
 	
 end
@@ -144,7 +144,7 @@ function console:Write(Key, ...)
 	local Message = table.concat(MessageParts, " ")
 
 	-- Create the log entry
-	local LogEntry = "[F][" .. console:GetPlatform() .. "][" .. (AppName or "???" ) .. "]: " .. tostring(Message)
+	local LogEntry = "[F🔒][" .. console:GetPlatform() .. "][" .. (AppName or "???" ) .. "]: " .. tostring(Message)
 	warn(LogEntry) -- Improve in future, but this just prints framwework output to the Roblox output
 
 	-- Prepend the new log entry to ensure newer first
@@ -378,7 +378,7 @@ function external:Authenticate(App, AppData, LocPlyr)
 			External = external
 		}
 
-		console:Write(internal.SelfSign, "Launched app: '"..AppData.FriendlyName.."["..string.lower(App.Name).."-".. string.lower(console:GetPlatform()) .."]' v"..tostring(ValVS))
+		console:Write(internal.SelfSign, "Launched app: '"..AppData.FriendlyName.." ["..string.lower(App.Name).."-".. string.lower(console:GetPlatform()) .."]' v"..tostring(ValVS))
         -- Pass the framework's console table along with the key
 
 		return APIPackage
