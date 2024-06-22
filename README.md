@@ -58,8 +58,6 @@ This is a short form version of FcnAsync. It takes at least one parameter:
 ## Sample Script
 
 ```lua
-local Fusion = require(game.ReplicatedStorage.Shared.Fusion)
-
 -- AppData for DataPlus, containing metadata
 local AppData = {
 	Version = "1.0",
