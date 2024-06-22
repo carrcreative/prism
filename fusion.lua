@@ -23,30 +23,22 @@ local RunService = game:GetService("RunService")
 -- Protected internal registry 
 internal.LogEntries     = {}
 internal.AppDataStorage = {}
-internal.AvailableAPI   = {}
 internal.AppKeys        = {}
 internal.AppInst        = {}
+internal.APITable		= {}
 internal.AppLibs        = {}
 internal.OneTimeKeys	= {}
 internal.RequestTimeout = 10 -- Time in seconds to wait before allowing another request from the same app
 internal.KeyValPeriod   = 30 -- Time in seconds for which a one-time key is valid
-internal.LocalPlayer    = nil
-internal.Version 	= "0.85b"
+internal.Version 		= "0.95b"
 
 internal.FlagConfiguration = {
-	AllowInsecureConnections = false; -- By default, only apps inside the Fusion security network can utilize each other. Setting this to false will allow app functions to be used from any Script	
+	AllowInsecureConnections = true; -- By default, only apps inside the Fusion security network can utilize each other. Setting this to false will allow app functions to be used from any Script	
 }
 
 
 -- Function to verify the app's key before providing access to console functions
 function internal:AppFgpt(CondensedData)
-	--[[
-		Our new app verification function! 
-		Replacing internal:Verify() 
-	
-		6/18/2024
-	]]
-	
 	local ModeLogic = {
 		GNFK = function() -- Get Name From Key 
 			local Key = CondensedData.Key 
@@ -62,6 +54,16 @@ function internal:AppFgpt(CondensedData)
 		
 		GKFN = function() -- Get Key From Name
 			return internal.AppKeys[CondensedData.Name] 
+		end,
+		
+		GFDT = function() 
+			
+			local FunctionString = CondensedData.FcnName 
+			
+			if internal.APITable[FunctionString] then  -- 
+				return internal.APITable[FunctionString]
+			end
+			
 		end,
 		
 	}
@@ -121,7 +123,7 @@ function console:Write(Key, ...)
 	local AppName
 	if Key == internal.SelfSign then
 		-- Process the rest of the parameters as before
-		AppName = "Fusion"
+		AppName = script.Name
 		-- ...
 	else
 		-- The message is from an app, find the app name using the key
@@ -314,7 +316,7 @@ function console:GenerateOneTimeKey(AppRealKey)
 end
 
 -- Function to set data for an app
-function console:DataSet(Key, ValName, Val)
+function console:BitSet(Key, ValName, Val)
     -- Verify the app's key
     local AppName = "Unknown"
     for name, data in pairs(internal.AppKeys) do
@@ -338,7 +340,7 @@ function console:DataSet(Key, ValName, Val)
 end
 
 -- Function to get data for an app
-function console:DataGet(Key, ValName)
+function console:BitGet(Key, ValName)
     -- Verify the app's key
     local AppName = "Unknown"
     for name, data in pairs(internal.AppKeys) do
@@ -361,83 +363,121 @@ function console:DataGet(Key, ValName)
 end
 
 -- Function to authenticate an app and provide it with a unique key and console table
-function external:Authenticate(App, AppData, LocPlyr)
+function external:Authenticate(App, AppData)
+	-- Validate the version string of the app
 	local ValVS = internal:ValidateVersionString(AppData.Version)
+
+	-- Check if the AppData is valid
 	if typeof(AppData) == "table" and AppData.Version and ValVS and AppData.Description and AppData.API and App then
-		
 		local AppAPI = AppData.API
 
-        local key = console:GenerateKey()
-        internal.AppKeys[App.Name] = key
+		-- Generate a unique key for the app
+		local key = console:GenerateKey()
+
+		-- Store the key, app instance, and API in the internal tables
+		internal.AppKeys[App.Name] = key
 		internal.AppInst[key] = App
-		internal.AppLibs[App.Name] = AppAPI
-				
+		internal.AppLibs[key] = AppData.API
+
+		-- Create an API package for the app
 		local APIPackage = {
 			Key = key,
 			AppAPI = console,
 			External = external
 		}
 
-		console:Write(internal.SelfSign, "Launched app: '"..AppData.FriendlyName.." ["..string.lower(App.Name).."-".. string.lower(console:GetPlatform()) .."]' v"..tostring(ValVS))
-        -- Pass the framework's console table along with the key
+		-- Process all the app API's for our central table 
+		local Incompatibility = false
+		local NameOfConflict
+		for FcnName, Fcn in pairs(AppAPI)  do
+			-- Check if the function name is already in use
+			if not (internal.APITable[FcnName]) then 
+				-- If not, add it to the table
+				internal.APITable[FcnName] = Fcn 
+			else
+				-- If it is, mark as incompatible and store the conflicting name
+				Incompatibility = true 
+				NameOfConflict = FcnName 
+			end
+		end
 
+		-- If there was a function name conflict, write an error message and return
+		if Incompatibility then 
+			console:Write(internal.SelfSign, "Launch of '"..App.Name.."-"..string.lower(console:GetPlatform()).."' failed because of a duplicated function compatibility error. Function name: "..tostring(NameOfConflict))
+			return
+		end
+
+		-- Write a success message and return the API package
+		console:Write(internal.SelfSign, "Launched app: '"..AppData.FriendlyName.." ["..string.lower(App.Name).."-".. string.lower(console:GetPlatform()) .."]' v"..tostring(ValVS))
 		return APIPackage
 	else
-        console:Write(internal.SelfSign, "Launch of '"..App.Name.."-"..string.lower(console:GetPlatform()).."'' has been blocked because of compatibility errors.")
-    end
-end
-
-function external:VerifyIdentity(OneTimeKey)
-    -- Retrieve the app instance using the one-time key
-    local AppInstance = internal.OneTimeKeys[OneTimeKey]
-
-    if AppInstance and (string.sub(OneTimeKey, 1, 5) == "OTK-S") then
-        -- Invalidate the one-time key
-        internal.OneTimeKeys[OneTimeKey] = nil
-        -- Return the app instance associated with the one-time key
-        return AppInstance
-    else
-        -- The key is invalid or has expired
-        return false, "Invalid or expired one-time key."
-    end
-end
-
--- Function to call a function on the app's console table safely
-function external:Post(ScriptOrKey, AppName, FunctionName, ...)
-	local AppConsole  = internal.AppLibs[AppName]
-	
-	local KeyFromName = internal:AppFgpt({
-		Mode = "GKFN"; 
-		Name = AppName
-	})
-		
-	-- First, let's decide which method we're going todo
-	--if type(ScriptOrKey) == "string" and string.len(ScriptOrKey) <= 128 then
-		-- For this, we want to verify that the posting script is actually a keyholder
-		
-		local APIKey = internal.AppKeys[AppName]
-		local APIName = internal:ForceAppName(APIKey)
-		local AppConsole  = internal.AppLibs[AppName]
-		local Result = internal:AppFgpt({
-			Mode = "GNFK"; 
-			Key = ScriptOrKey
-		})
-	
-		
-	if Result or (internal.FlagConfiguration.AllowInsecureConnections) then 
-		-- Now that we've verified the key, let's check if the app exists
-
-		if AppConsole then -- Hurray!
-			local Status, Result = pcall(AppConsole[FunctionName], ...)
-
-			if (not Status) then
-				console:Write(internal.SelfSign,"Error calling function: " .. tostring(Result))
-			end
-			
-			return Result
-		end				
+		-- If the AppData was not valid, write an error message and return nil
+		console:Write(internal.SelfSign, "Launch of '"..App.Name.."-"..string.lower(console:GetPlatform()).."' has been blocked because of compatibility errors.")
+		return nil
 	end
 end
 
--- Return the 'external' table when the module is required 
+-- Function to verify the identity of an app using a one-time key
+function external:VerifyIdentity(OneTimeKey)
+	-- Retrieve the app instance using the one-time key
+	local AppInstance = internal.OneTimeKeys[OneTimeKey]
+
+	-- Check if the one-time key is valid
+	if AppInstance and (string.sub(OneTimeKey, 1, 5) == "OTK-S") then
+		-- Invalidate the one-time key
+		internal.OneTimeKeys[OneTimeKey] = nil
+		-- Return the app instance associated with the one-time key
+		return AppInstance
+	else
+		-- The key is invalid or has expired
+		return false, "Invalid or expired one-time key."
+	end
+end
+
+-- This is our ProcessFcn() 
+function internal:ProcessFcn(PrivateKey, ...)
+	-- Collect all arguments into a table
+	local Arguments = {...}
+	local FunctionString = Arguments[1]
+
+	-- Let's kill any spam 
+	if not PrivateKey or not FunctionString then return nil end
+
+	-- Let's verify that they are in the Fusion network 
+	local AppName = internal:AppFgpt({Key = PrivateKey;Mode = "GNFK";})
+	if not AppName then console:Write(internal.SelfSign, "Error1 in ProcessFcn() core module") return nil end 
+
+	-- Grab the actual function from our preprocessed dictionary 
+	local Fcn = internal.APITable[FunctionString]
+	if not Fcn then console:Write(internal.SelfSign, "Error2 in ProcessFcn() core module") return nil  end
+
+	-- Unpack the arguments when calling the function
+	return Fcn(unpack(Arguments))
+end
+
+-- Function to call ProcessFcn() with the provided private key and arguments
+function external:Fcn(PrivateKey,...)
+	return internal:ProcessFcn(PrivateKey, ...)
+end
+
+-- Function to call ProcessFcn() asynchronously with the provided private key and arguments
+function external:FcnAsync(PrivateKey, ...)
+	local Attachments = {...}
+	spawn(function()
+		internal:ProcessFcn(PrivateKey, unpack(Attachments))
+	end)
+end
+
+-- Short form function names for ease of scripting
+function external:f(PrivateKey,...)
+	return internal:ProcessFcn(PrivateKey, ...)
+end
+
+function external:fa(PrivateKey, ...)
+	local Attachments = {...}
+	spawn(function()
+		internal:ProcessFcn(PrivateKey, unpack(Attachments))
+	end)
+end
+
 return external

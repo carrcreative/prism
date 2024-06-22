@@ -19,153 +19,73 @@ https://github.com/dylancarr99/fusion/releases/tag/pre-release
 ## Introduction 
 Fusion is a security-centric framework that streamlines the development process on Roblox, offering developers a seamless and secure way to manage their game’s operations. It emphasizes ease of use, allowing creators to implement robust features without compromising on safety. Fusion’s architecture is designed to protect data integrity and provide a trustworthy environment for both developers and players. It’s an indispensable tool for building resilient and secure Roblox applications with confidence.
 
-## Fusion Script Documentation
+# Fusion Framework Documentation
 
-The Fusion script is a robust framework for Roblox developers, providing secure and interconnected application development. It offers three levels of access: `external`, `internal`, and `console`.
+## Overview
+Fusion is a powerful framework that provides a secure network of apps within the Roblox environment. It allows apps to authenticate, verify identity, and call functions in a secure and efficient manner.
 
-### Security Clearance Levels
-- **external**: Functions accessible to all server scripts.
-- **internal**: Functions only accessible within Fusion's core, containing the most sensitive functions.
-- **console**: Functions accessible by Fusion-compatible apps after authentication.
+## Functions
 
----
+### external:Authenticate(App, AppData)
+This function authenticates an app and provides it with a unique key and console table. It takes two parameters:
+- **App**: The app to be authenticated.
+- **AppData**: A table containing the app’s details, including its version, description, and API.
 
-### Key Functions
+### external:VerifyIdentity(OneTimeKey)
+This function verifies the identity of an app using a one-time key. It takes one parameter:
+- **OneTimeKey**: The one-time key used for verification.
 
-#### internal:AppFgpt(CondensedData)
-Verifies the app's key to provide access to console functions.
-- **Parameters**:
-  - `CondensedData`: A table with mode and key or name.
-- **Returns**: App name for a given key or vice versa.
+### external:Fcn(PrivateKey,…)
+This function calls ProcessFcn() with the provided private key and arguments. It takes at least one parameter:
+- **PrivateKey**: The private key for the app.
+- **...**: The arguments to be passed to the function.
 
----
+### external:FcnAsync(PrivateKey, …)
+This function calls ProcessFcn() asynchronously with the provided private key and arguments. It takes at least one parameter:
+- **PrivateKey**: The private key for the app.
+- **...**: The arguments to be passed to the function.
 
-#### internal:ForceAppName(Key)
-Retrieves the app name associated with a key.
-- **Parameters**:
-  - `Key`: The key associated with an app.
-- **Returns**: App name or `nil`.
+### external:f(PrivateKey,…)
+This is a short form version of Fcn. It takes at least one parameter:
+- **PrivateKey**: The private key for the app.
+- **...**: The arguments to be passed to the function.
 
----
+### external:fa(PrivateKey, …)
+This is a short form version of FcnAsync. It takes at least one parameter:
+- **PrivateKey**: The private key for the app.
+- **...**: The arguments to be passed to the function.
 
-#### internal:ValidateVersionString(str)
-Validates and condenses a version string.
-- **Parameters**:
-  - `str`: Version string to validate.
-- **Returns**: Condensed version string or `false`.
-
----
-
-#### console:Write(Key, ...)
-Writes log entries and outputs them to the Roblox output.
-- **Parameters**:
-  - `Key`: App's key.
-  - `...`: Additional log parameters.
-- **Returns**: Updated log entries table.
-
----
-
-#### console:GenerateKey(ForcedKeyLength, ForcedTimeout)
-Generates a unique key for secure communication.
-- **Parameters**:
-  - `ForcedKeyLength`: Desired key length.
-  - `ForcedTimeout`: Timeout duration.
-- **Returns**: Unique key or `nil`.
-
----
-
-#### console:TerminateOneTimeKeys(AppRealKey, SpecificKey)
-Terminates one-time keys using the app's real key.
-- **Parameters**:
-  - `AppRealKey`: Real key of the app.
-  - `SpecificKey`: Specific key to terminate.
-
----
-
-#### console:GetPlatform()
-Retrieves the current platform/environment.
-- **Returns**: Platform string.
-
----
-
-#### console:GenerateOneTimeKey(AppRealKey)
-Generates a one-time key using the app's real key.
-- **Parameters**:
-  - `AppRealKey`: Real key of the app.
-- **Returns**: One-time key.
-
----
-
-#### console:DataSet(Key, ValName, Val)
-Sets data for an app.
-- **Parameters**:
-  - `Key`: App's key.
-  - `ValName`: Value name.
-  - `Val`: Value to set.
-- **Returns**: `true` if successful.
-
----
-
-#### console:DataGet(Key, ValName)
-Retrieves data for an app.
-- **Parameters**:
-  - `Key`: App's key.
-  - `ValName`: Value name.
-- **Returns**: Value or `nil`.
-
----
-
-#### external:Authenticate(App, AppData, LocPlyr)
-Authenticates an app and provides a key and console table.
-- **Parameters**:
-  - `App`: App instance.
-  - `AppData`: App data table.
-  - `LocPlyr`: Local player instance.
-- **Returns**: API package.
-
----
-
-#### external:VerifyIdentity(OneTimeKey)
-Verifies an app's identity using a one-time key.
-- **Parameters**:
-  - `OneTimeKey`: One-time key.
-- **Returns**: App instance or error message.
-
----
-
-#### external:Post(ScriptOrKey, AppName, FunctionName, ...)
-Calls a function on the app's console table safely.
-- **Parameters**:
-  - `ScriptOrKey`: Script or key of the entity.
-  - `AppName`: App name.
-  - `FunctionName`: Function name.
-  - `...`: Additional arguments.
-- **Returns**: Function call result.
-
----
-
-### Example Usage
+## Sample Script
 
 ```lua
--- Example of an app authenticating with Fusion
+-- AppData for DataPlus, containing metadata
 local AppData = {
-    Version = "1.0",
-    Description = "My Fusion App",
-    API = {}, -- Your app's API functions
-    FriendlyName = "MyApp"
+	Version = "1.0",
+	Description = "n/a",
+	API = {},
+	FriendlyName = "Git's Test App"
 }
 
-local FusionApp = require(FusionFrameworkModule)
-local APIPackage = FusionApp:Authenticate(script, AppData)
+-- Authenticates with the Fusion framework and starts the service
+local Data = {}
+local function AuthenticateWithFusion()
+	local APIPackage = Fusion:Authenticate(script, AppData) -- Fusion will return our API package
+	Data.PrivateKey = APIPackage.Key -- This is our private key. Without this, you cannot use Fusion's API 
+	Data.Console = APIPackage.AppAPI -- This is the table featuring important functions from Fusion's core systems 
+	Data.API = APIPackage.External 
+end
 
--- Writing a log entry
-APIPackage.AppAPI:Write(APIPackage.Key, "Log message.")
+AuthenticateWithFusion()
 
--- Setting and getting data
-APIPackage.AppAPI:DataSet(APIPackage.Key, "PlayerScore", 100)
-local score = APIPackage.AppAPI:DataGet(APIPackage.Key, "PlayerScore")
+-- Putting API calls in functions is easier if you're using the same API a lot 
+local function CoolerPrint(...)
+	Data.Console:Write(Data.PrivateKey, ...)
+end
 
--- Using a one-time key
-local oneTimeKey = APIPackage.AppAPI:GenerateOneTimeKey(APIPackage.Key)
-local verifiedInstance = FusionApp:VerifyIdentity(oneTimeKey)
+CoolerPrint("Hey cool dudes")
+
+-- If this were a real function: 
+-- Data.API:f(Data.PrivateKey, "Ping")
+-- It would return Pong! 
+```
 
