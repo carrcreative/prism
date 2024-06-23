@@ -19,6 +19,15 @@ https://github.com/dylancarr99/fusion/releases/tag/stable
 ## Overview
 Fusion is a powerful framework that provides a secure network of apps within the Roblox environment. It allows apps to authenticate, verify identity, and call functions in a secure and efficient manner.
 
+
+
+
+### Fusion Security Network
+![image](https://github.com/carrcreative/fusion/assets/173332208/7a9fdb21-16ca-48fb-a51b-261ae25c856f)
+
+**Introducing the Fusion Security Network –** the pinnacle of secure, interconnected app development for Roblox Lua. With our unique registration system, each app receives a private key, ensuring secure interactions within the Fusion ecosystem. Leverage the power of shared APIs, robust internal functions, and protected information storage, all under the Fusion umbrella. Build with confidence and join the revolution in secure app design with Fusion Security Network – where innovation meets security.
+
+
 ## Functions
 
 ### external:Authenticate(App, AppData)
