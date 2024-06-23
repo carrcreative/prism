@@ -30,7 +30,7 @@ internal.AppLibs        = {}
 internal.OneTimeKeys	= {}
 internal.RequestTimeout = 10 -- Time in seconds to wait before allowing another request from the same app
 internal.KeyValPeriod   = 30 -- Time in seconds for which a one-time key is valid
-internal.Version 		= "0.95b"
+internal.Version 		= "1.0"
 
 internal.FlagConfiguration = {
 	AllowInsecureConnections = true; -- By default, only apps inside the Fusion security network can utilize each other. Setting this to false will allow app functions to be used from any Script	
@@ -151,6 +151,9 @@ function console:Write(Key, ...)
 
 	-- Prepend the new log entry to ensure newer first
 	table.insert(internal.LogEntries, 1, LogEntry)
+
+	-- Return the updated log entries tables
+	return internal.LogEntries 
 end
 
 
@@ -176,6 +179,7 @@ function console:GenerateKey(ForcedKeyLength, ForcedTimeout)
 			-- Fix the key length, and also notify the user with a warning.
 			KeyLength = 16 
 			Timeout = 10
+			--console:Write(internal.SelfSign,"Warning: Attempted to call internal function GenerateKey() with invalid parameters. We let the function through, but we had to override the parameters with default values. ")
 		end
 
 		-- Local function for first-time setup only
