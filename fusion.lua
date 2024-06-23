@@ -120,7 +120,7 @@ end
 function console:Write(Key, ...)
 	
 	-- Check if the key is the framework's internal self-sign key
-	local AppName
+	local AppName = "Unknown"
 	if Key == internal.SelfSign then
 		-- Process the rest of the parameters as before
 		AppName = script.Name
@@ -151,9 +151,6 @@ function console:Write(Key, ...)
 
 	-- Prepend the new log entry to ensure newer first
 	table.insert(internal.LogEntries, 1, LogEntry)
-
-	-- Return the updated log entries tables
-	return internal.LogEntries 
 end
 
 
@@ -179,7 +176,6 @@ function console:GenerateKey(ForcedKeyLength, ForcedTimeout)
 			-- Fix the key length, and also notify the user with a warning.
 			KeyLength = 16 
 			Timeout = 10
-			--console:Write(internal.SelfSign,"Warning: Attempted to call internal function GenerateKey() with invalid parameters. We let the function through, but we had to override the parameters with default values. ")
 		end
 
 		-- Local function for first-time setup only
