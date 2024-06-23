@@ -30,7 +30,7 @@ internal.AppLibs        = {}
 internal.OneTimeKeys	= {}
 internal.RequestTimeout = 10 -- Time in seconds to wait before allowing another request from the same app
 internal.KeyValPeriod   = 30 -- Time in seconds for which a one-time key is valid
-internal.Version 		= "0.95b"
+internal.Version 		= "1.0"
 
 internal.FlagConfiguration = {
 	AllowInsecureConnections = true; -- By default, only apps inside the Fusion security network can utilize each other. Setting this to false will allow app functions to be used from any Script	
@@ -120,7 +120,7 @@ end
 function console:Write(Key, ...)
 	
 	-- Check if the key is the framework's internal self-sign key
-	local AppName
+	local AppName = "Unknown"
 	if Key == internal.SelfSign then
 		-- Process the rest of the parameters as before
 		AppName = script.Name
