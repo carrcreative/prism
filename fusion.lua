@@ -21,25 +21,27 @@ local console           = {} -- Functions accessable by apps compatible with Fus
 local RunService = game:GetService("RunService")
 
 -- Protected internal registry 
-internal.LogEntries     = {}
+internal.LogEntries = {}
 internal.AppDataStorage = {}
-internal.AppKeys        = {}
-internal.AppInst        = {}
-internal.APITable		= {}
-internal.AppLibs        = {}
-internal.AppNames		= {}
-internal.OneTimeKeys	= {}
-internal.DriverNames    = {}
+internal.AppKeys = {}
+internal.AppInst = {}
+internal.APITable = {}
+internal.AppLibs = {}
+internal.AppNames = {}
+internal.OneTimeKeys = {}
+internal.ProducedInstances = {}
+internal.DriverNames = {}
 internal.RequestTimeout = 10 -- Time in seconds to wait before allowing another request from the same app
-internal.KeyValPeriod   = 30 -- Time in seconds for which a one-time key is valid
-internal.Version 		= "1.0"
+internal.KeyValPeriod = 30 -- Time in seconds for which a one-time key is valid
+internal.Version = "1.1"
+internal.HeartBeatFcns = {}
+internal.HeartbeatThrottle = nil
 
 internal.AllowedDrivers = {
-	"drivertest"
 }
 
 internal.FlagConfiguration = {
-	AllowInsecureConnections = true; -- By default, only apps inside the Fusion security network can utilize each other. Setting this to false will allow app functions to be used from any Script	
+	AllowInsecureConnections = false; -- By default, only apps inside the Fusion security network can utilize each other. Setting this to false will allow app functions to be used from any Script	
 }
 
 
@@ -86,23 +88,39 @@ function internal:AppFgpt(CondensedData)
 	else
 		error("Fatal internal:AppFgpt() failure: Incorrect ModeLogic")
 	end
-
 end
 
-function internal:VerifyDriver()
-	return true 
-end
+-- Helper function to check dependencies
+function console:CheckDepends(data)
+	for _, dependency in ipairs(data) do
 
-function internal:ForceAppName(Key)
-	for AppName, intKey in pairs (internal.AppKeys) do
-		if intKey == Key then 
-			return AppName
+		-- Check if the dependency is not loaded
+		local dependencyFound = false
+		for _, appName in pairs(internal.AppNames) do
+			if appName == dependency then
+				dependencyFound = true
+				break
+			end
+		end
+
+		if not dependencyFound then
+			return false, "Failed to authenticate app due to missing dependency: " .. dependency
 		end
 	end
-	return nil
+	return true
+end
+
+function internal:HeartBeat(...)
+	for _, func in pairs(internal.HeartBeatFcns) do
+		if internal.HeartbeatThrottle then
+			wait(internal.HeartbeatThrottle)
+		end
+		func({...})
+	end
 end
 
 function internal:ValidateVersionString(str)
+	internal:HeartBeat("ValidateVersionStr", str) 
 	-- Condense the string to no more than 5 characters
 	local condensedStr = string.sub(str, 1, 5)
 
@@ -126,9 +144,69 @@ function internal:ValidateVersionString(str)
 	return condensedStr
 end
 
+-- Function to forcibly disconnect an app from the Fusion framework
+function internal:BlockApp(AppName)
+	internal:HeartBeat("BlockApp", AppName)
+	-- Check if the app is connected
+	local key = internal.AppKeys[AppName]
+	if key then
+		-- If the app is connected, remove it from the internal tables
+		internal.AppKeys[AppName] = nil
+		internal.AppInst[key] = nil
+		internal.AppLibs[key] = nil
+		internal.AppNames[key] = nil
+
+		-- Print a message to confirm the disconnection
+		console:Write(internal.SelfSign, "App '" .. AppName .. "' has been blocked from Fusion Security Network.")
+	end
+end
+
+-- Function to create an instance with the given Properties
+function console:Prod(PrivateKey, Properties)
+
+	local AppName = internal:AppFgpt({
+		Mode = "GNFK"; 
+		Key = PrivateKey
+	})
+
+	if not AppName then return nil end 
+
+
+	-- Check if the ClassName property is provided
+	if not Properties.ClassName or type(Properties.ClassName) ~= "string" then
+		console:Write(internal.SelfSign, "ClassName property must be provided and must be a string.")
+		return
+	end
+
+	-- Create an instance of the given class
+	local instance = Instance.new(Properties.ClassName)
+
+	-- Iterate over the rest of the Properties and set them on the instance
+	for propertyName, propertyValue in pairs(Properties) do
+		-- Skip the ClassName property
+		if propertyName ~= "ClassName" then
+			-- Check if the property name is valid
+			if type(propertyName) ~= "string" then
+				console:Write(internal.SelfSign, "Property name must be a string.")
+				return
+			end
+
+			-- Set the property on the instance
+			instance[propertyName] = propertyValue
+		end
+	end
+
+	if instance then 
+		internal.ProducedInstances[instance.Name] = instance
+	end
+
+	-- Return the created instance
+	return instance
+end
+
 -- Function to write log entries
 function console:Write(Key, ...)
-
+	internal:HeartBeat("console:Write()", unpack({...}))
 	-- Check if the key is the framework's internal self-sign key
 	local AppName = "Unknown"
 	if Key == internal.SelfSign then
@@ -142,8 +220,10 @@ function console:Write(Key, ...)
 			Key = Key
 		})
 
+
+
 		-- If no app is found, the key is invalid
-		if AppName == "Unknown" then
+		if (AppName == "Unknown") or (AppName == nil) then
 			return
 		end
 	end
@@ -169,6 +249,7 @@ end
 
 -- This simple function returns the table, it is up to the calling function to save this properly. 
 function console:GenerateKey(ForcedKeyLength, ForcedTimeout)
+	internal:HeartBeat("GenerateKey", ForcedKeyLength, ForcedTimeout)
 	-- Initialize an empty Key string
 	local Key = ""
 	-- Table to keep track of used Keys to ensure uniqueness
@@ -195,6 +276,7 @@ function console:GenerateKey(ForcedKeyLength, ForcedTimeout)
 	-- Local function for first-time setup only
 	-- Function to generate a table of all alphanumeric characters and symbols
 	local function GenerateAlphanumericAndSymbolsTable()
+		internal:HeartBeat("GenerateAlphanumericAndSymbolsTable")
 		local chars = {}
 		-- Add numeric characters (0-9)
 		for i = 48, 57 do table.insert(chars, string.char(i)) end
@@ -207,7 +289,7 @@ function console:GenerateKey(ForcedKeyLength, ForcedTimeout)
 		for i = 58, 64 do table.insert(chars, string.char(i)) end -- Special characters
 		for i = 91, 96 do table.insert(chars, string.char(i)) end -- Brackets and caret
 		for i = 123, 126 do table.insert(chars, string.char(i)) end -- Braces and tilde
-				
+
 		return chars
 	end
 
@@ -264,11 +346,11 @@ internal.SelfSign = console:GenerateKey()
 
 -- Function for apps to terminate their one-time keys using their real key
 function console:TerminateOneTimeKeys(AppRealKey, SpecificKey)
+	internal:HeartBeat("TerminateOneTimeKeys", AppRealKey, SpecificKey) 
 	-- Verify that the request is coming from the app itself
 	if internal.AppInst[AppRealKey] ~= script then
 		-- Future logic for security software 
 	end
-
 	if SpecificKey then
 		-- Terminate a specific key
 		if internal.OneTimeKeys[SpecificKey] == internal.AppInst[AppRealKey] then
@@ -286,6 +368,7 @@ end
 
 -- Function to get the current platform/environment
 function console:GetPlatform()
+	internal:HeartBeat("GetPlatform()") 
 	if RunService:IsStudio() then
 		if RunService:IsClient() then
 			return "Local"
@@ -303,7 +386,7 @@ end
 
 -- Function to generate a one-time key for an app using its real key
 function console:GenerateOneTimeKey(AppRealKey)
-
+	internal:HeartBeat("GenerateOneTimeKey", AppRealKey) 
 	internal.LastRequestTime = internal.LastRequestTime or {}
 
 	-- Check for rate limiting
@@ -328,6 +411,7 @@ end
 
 -- Function to set data for an app
 function console:BitSet(Key, ValName, Val)
+	internal:HeartBeat("BitSet", Key, ValName, Val)
 	-- Verify the app's key
 	local AppName = "Unknown"
 	for name, data in pairs(internal.AppKeys) do
@@ -352,6 +436,7 @@ end
 
 -- Function to get data for an app
 function console:BitGet(Key, ValName)
+	internal:HeartBeat("BitGet", Key, ValName)
 	-- Verify the app's key
 	local AppName = "Unknown"
 	for name, data in pairs(internal.AppKeys) do
@@ -375,6 +460,7 @@ end
 
 -- Function to authenticate an app and provide it with a unique key and console table
 function external:Authenticate(App, AppData)
+	internal:HeartBeat("Authenticate", App, AppData)
 	-- Validate the version string of the app
 	local ValVS = internal:ValidateVersionString(AppData.Version)
 
@@ -382,14 +468,28 @@ function external:Authenticate(App, AppData)
 	if typeof(AppData) == "table" and AppData.Version and ValVS and AppData.Description and AppData.API and App then
 		local AppAPI = AppData.API
 
+
 		-- Generate a unique key for the app
 		local key = console:GenerateKey()
 
 		-- Store the key, app instance, and API in the internal tables
 		internal.AppKeys[App.Name] = key
 		internal.AppInst[key] = App
-		internal.AppLibs[key] = AppData.API
+		internal.AppLibs[key] = AppAPI
 		internal.AppNames[key] = App.Name -- Add the app name to AppNames
+
+		local Incompatibility = false
+
+
+		if AppData.Depends then 
+			local VerifyPreReqs, ErrorMsg = console:CheckDepends(AppData.Depends)
+			print(VerifyPreReqs)
+			if not VerifyPreReqs then
+				console:Write(ErrorMsg)
+				Incompatibility = true 
+				return nil
+			end
+		end
 
 		-- Create an API package for the app
 		local APIPackage = {
@@ -399,7 +499,6 @@ function external:Authenticate(App, AppData)
 		}
 
 		-- Process all the app API's for our central table 
-		local Incompatibility = false
 		local NameOfConflict
 		for FcnName, Fcn in pairs(AppAPI)  do
 			-- Check if the function name is already in use
@@ -416,7 +515,7 @@ function external:Authenticate(App, AppData)
 		-- If there was a function name conflict, write an error message and return
 		if Incompatibility then 
 			console:Write(internal.SelfSign, "Launch of '"..App.Name.."-"..string.lower(console:GetPlatform()).."' failed because of a duplicated function compatibility error. Function name: "..tostring(NameOfConflict))
-			return
+			return nil
 		end
 
 		-- Write a success message and return the API package
@@ -431,6 +530,7 @@ end
 
 -- Function to authenticate a driver and provide it with a unique key, console table, and internal access
 function external:AuthenticateDriver(Driver, DriverData)
+	internal:HeartBeat("AuthenticateDriver", Driver, DriverData)
 	-- Validate the version string of the driver
 	local ValVS = internal:ValidateVersionString(DriverData.Version)
 
@@ -447,7 +547,7 @@ function external:AuthenticateDriver(Driver, DriverData)
 			end
 		end
 		if not isWhitelisted then
-			error("Failed to authenticate driver due to whitelist check failure.")
+			console:Write(internal.SelfSign, "Failed to install driver: '"..DriverData.FriendlyName.."' because it isn't entered in the whitelist.")
 			return
 		end
 
@@ -501,6 +601,7 @@ end
 
 -- Function to get a list of all driver names
 function external:GetDriverNames()
+	internal:HeartBeat("GetDriverNames")
 	local driverNames = {}
 	for _, name in pairs(internal.DriverNames) do
 		table.insert(driverNames, name)
@@ -510,6 +611,7 @@ end
 
 -- Function to get a list of all app names
 function external:GetAppNames()
+	internal:HeartBeat("GetAppNames")
 	local appNames = {}
 	for _, name in pairs(internal.AppNames) do
 		table.insert(appNames, name)
@@ -520,6 +622,7 @@ end
 
 -- Function to verify the identity of an app using a one-time key
 function external:VerifyIdentity(OneTimeKey)
+	internal:HeartBeat("VerifyIdentity", OneTimeKey)
 	-- Retrieve the app instance using the one-time key
 	local AppInstance = internal.OneTimeKeys[OneTimeKey]
 
@@ -537,6 +640,7 @@ end
 
 -- This is our ProcessFcn() 
 function internal:ProcessFcn(PrivateKey, ...)
+	internal:HeartBeat("ProcessFcn", PrivateKey, unpack({...}))
 	-- Collect all arguments into a table
 	local Arguments = {...}
 	local FunctionString = Arguments[1]
