@@ -1,31 +1,22 @@
-![image](https://github.com/carrcreative/fusion/assets/173332208/207bf28e-d697-4502-a85a-51794a1ddf66)
-```
-8888888888                d8b                   
-888                       Y8P                   
-888                                             
-8888888 888  888 .d8888b  888  .d88b.  88888b.  
-888     888  888 88K      888 d88""88b 888 "88b 
-888     888  888 "Y8888b. 888 888  888 888  888 
-888     Y88b 888      X88 888 Y88..88P 888  888 
-888      "Y88888  88888P' 888  "Y88P"  888  888
-An open-source project
-```
+![image](https://github.com/carrcreative/fusion/assets/173332208/e097613b-a012-4c00-b84c-5379c972e727)
+
+
 
 Find latest release: 
-https://github.com/dylancarr99/fusion/releases/tag/stable
+https://github.com/dylancarr99/Prism/releases/tag/stable
 
-# Fusion Framework Documentation
+# Prism Framework Documentation
 
 ## Overview
-Fusion is a powerful framework that provides a secure network of apps within the Roblox environment. It allows apps to authenticate, verify identity, and call functions in a secure and efficient manner.
+Prism is a powerful framework that provides a secure network of apps within the Roblox environment. It allows apps to authenticate, verify identity, and call functions in a secure and efficient manner.
 
 
 
 
-### Fusion Security Network
-![image](https://github.com/carrcreative/fusion/assets/173332208/7a9fdb21-16ca-48fb-a51b-261ae25c856f)
+### Prism Security 
+![image](https://github.com/carrcreative/fusion/assets/173332208/500088ab-dfc5-46d6-a059-9098a6056a91)
 
-**Introducing the Fusion Security Network –** the pinnacle of secure, interconnected app development for Roblox Lua. With our unique registration system, each app receives a private key, ensuring secure interactions within the Fusion ecosystem. Leverage the power of shared APIs, robust internal functions, and protected information storage, all under the Fusion umbrella. Build with confidence and join the revolution in secure app design with Fusion Security Network – where innovation meets security.
+**Introducing the Prism Security Network –** the pinnacle of secure, interconnected app development for Roblox Lua. With our unique registration system, each app receives a private key, ensuring secure interactions within the Prism ecosystem. Leverage the power of shared APIs, robust internal functions, and protected information storage, all under the Prism umbrella. Build with confidence and join the revolution in secure app design with Prism Security Network – where innovation meets security.
 
 
 ## Functions
@@ -70,16 +61,16 @@ local AppData = {
 	FriendlyName = "Git's Test App"
 }
 
--- Authenticates with the Fusion framework and starts the service
+-- Authenticates with the Prism framework and starts the service
 local Data = {}
-local function AuthenticateWithFusion()
-	local APIPackage = Fusion:Authenticate(script, AppData) -- Fusion will return our API package
-	Data.PrivateKey = APIPackage.Key -- This is our private key. Without this, you cannot use Fusion's API 
-	Data.Console = APIPackage.AppAPI -- This is the table featuring important functions from Fusion's core systems 
+local function AuthenticateWithPrism()
+	local APIPackage = Prism:Authenticate(script, AppData) -- Prism will return our API package
+	Data.PrivateKey = APIPackage.Key -- This is our private key. Without this, you cannot use Prism's API 
+	Data.Console = APIPackage.AppAPI -- This is the table featuring important functions from Prism's core systems 
 	Data.API = APIPackage.External 
 end
 
-AuthenticateWithFusion()
+AuthenticateWithPrism()
 
 -- Putting API calls in functions is easier if you're using the same API a lot 
 local function CoolerPrint(...)
