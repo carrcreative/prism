@@ -3,7 +3,7 @@
 
 
 Find latest release: 
-https://github.com/dylancarr99/Prism/releases/tag/stable
+https://github.com/carrcreative/prism/releases/tag/rebrand
 
 # Prism Framework Documentation
 
