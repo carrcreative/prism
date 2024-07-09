@@ -3,8 +3,8 @@
 
 
 Find latest release: 
-https://github.com/carrcreative/prism/releases/tag/rebrand
-
+[https://github.com/carrcreative/prism/releases/tag/1.2
+](https://github.com/carrcreative/prism/releases/tag/1.2)
 # Prism Framework Documentation
 
 ## Overview
@@ -19,33 +19,29 @@ Prism is a powerful framework that provides a secure network of apps within the 
 **Introducing the Prism Security Network –** the pinnacle of secure, interconnected app development for Roblox Lua. With our unique registration system, each app receives a private key, ensuring secure interactions within the Prism ecosystem. Leverage the power of shared APIs, robust internal functions, and protected information storage, all under the Prism umbrella. Build with confidence and join the revolution in secure app design with Prism Security Network – where innovation meets security.
 
 
-## Functions
+## Functions (after authentication)
 
 ### external:Authenticate(App, AppData)
 This function authenticates an app and provides it with a unique key and console table. It takes two parameters:
 - **App**: The app to be authenticated.
 - **AppData**: A table containing the app’s details, including its version, description, and API.
 
-### external:VerifyIdentity(OneTimeKey)
-This function verifies the identity of an app using a one-time key. It takes one parameter:
-- **OneTimeKey**: The one-time key used for verification.
-
-### external:Fcn(PrivateKey,…)
+### AppAPI:Fcn(PrivateKey,…)
 This function calls ProcessFcn() with the provided private key and arguments. It takes at least one parameter:
 - **PrivateKey**: The private key for the app.
 - **...**: The arguments to be passed to the function.
 
-### external:FcnAsync(PrivateKey, …)
+### AppAPI:FcnAsync(PrivateKey, …)
 This function calls ProcessFcn() asynchronously with the provided private key and arguments. It takes at least one parameter:
 - **PrivateKey**: The private key for the app.
 - **...**: The arguments to be passed to the function.
 
-### external:f(PrivateKey,…)
+### AppAPI:f(PrivateKey,…)
 This is a short form version of Fcn. It takes at least one parameter:
 - **PrivateKey**: The private key for the app.
 - **...**: The arguments to be passed to the function.
 
-### external:fa(PrivateKey, …)
+### AppAPI:fa(PrivateKey, …)
 This is a short form version of FcnAsync. It takes at least one parameter:
 - **PrivateKey**: The private key for the app.
 - **...**: The arguments to be passed to the function.
@@ -67,7 +63,6 @@ local function AuthenticateWithPrism()
 	local APIPackage = Prism:Authenticate(script, AppData) -- Prism will return our API package
 	Data.PrivateKey = APIPackage.Key -- This is our private key. Without this, you cannot use Prism's API 
 	Data.Console = APIPackage.AppAPI -- This is the table featuring important functions from Prism's core systems 
-	Data.API = APIPackage.External 
 end
 
 AuthenticateWithPrism()
@@ -80,7 +75,7 @@ end
 CoolerPrint("Hey cool dudes")
 
 -- If this were a real function: 
--- Data.API:f(Data.PrivateKey, "Ping")
+-- Data.Console:f(Data.PrivateKey, "Ping")
 -- It would return Pong! 
 ```
 
