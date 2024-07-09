@@ -5,77 +5,114 @@
 Find latest release: 
 [https://github.com/carrcreative/prism/releases/tag/1.2
 ](https://github.com/carrcreative/prism/releases/tag/1.2)
-# Prism Framework Documentation
-
-## Overview
-Prism is a powerful framework that provides a secure network of apps within the Roblox environment. It allows apps to authenticate, verify identity, and call functions in a secure and efficient manner.
 
 
+# Prism
 
+Prism is a robust and secure framework for managing apps and drivers in a Roblox environment. It provides a variety of functionalities for key management, data storage, function processing, and more. It also includes several safety measures such as secret keys and defined access levels.
 
-### Prism Security 
-![image](https://github.com/carrcreative/fusion/assets/173332208/500088ab-dfc5-46d6-a059-9098a6056a91)
+## Security Clearance Levels
 
-**Introducing the Prism Security Network –** the pinnacle of secure, interconnected app development for Roblox Lua. With our unique registration system, each app receives a private key, ensuring secure interactions within the Prism ecosystem. Leverage the power of shared APIs, robust internal functions, and protected information storage, all under the Prism umbrella. Build with confidence and join the revolution in secure app design with Prism Security Network – where innovation meets security.
+Prism defines three levels of security clearance:
 
+1. **PrismExt**: Functions accessible to every script.
+2. **PrismCore**: Functions accessible only within Prism's core. These are sensitive functions that drivers are allowed to configure.
+3. **SharedAPI**: Functions accessible by apps compatible with Prism, only after they have been authenticated.
 
-## Functions (after authentication)
+## Key Functions
 
-### external:Authenticate(App, AppData)
-This function authenticates an app and provides it with a unique key and console table. It takes two parameters:
-- **App**: The app to be authenticated.
-- **AppData**: A table containing the app’s details, including its version, description, and API.
+### Data Storage
 
-### AppAPI:Fcn(PrivateKey,…)
-This function calls ProcessFcn() with the provided private key and arguments. It takes at least one parameter:
-- **PrivateKey**: The private key for the app.
-- **...**: The arguments to be passed to the function.
+- `SharedAPI:BitSet(PrivateKey, ValName, Val, Expiration)`: Sets a value for an app in the protected PrismMemory table. The value can have an optional expiration time.
+- `SharedAPI:BitGet(PrivateKey, ValName)`: Retrieves a value for an app from the protected PrismMemory table.
 
-### AppAPI:FcnAsync(PrivateKey, …)
-This function calls ProcessFcn() asynchronously with the provided private key and arguments. It takes at least one parameter:
-- **PrivateKey**: The private key for the app.
-- **...**: The arguments to be passed to the function.
+### Function Processing
 
-### AppAPI:f(PrivateKey,…)
-This is a short form version of Fcn. It takes at least one parameter:
-- **PrivateKey**: The private key for the app.
-- **...**: The arguments to be passed to the function.
+- `PrismCore:ProcessFcn(PrivateKey, ...)`, `SharedAPI:Fcn(PrivateKey,...)`, `SharedAPI:FcnAsync(PrivateKey, ...)`, `SharedAPI:f(PrivateKey,...)`, and `SharedAPI:fa(PrivateKey, ...)`: These functions process a function call with the provided private key and arguments. The function to be called and its arguments are passed as parameters. The `Async` versions execute the function asynchronously, but also cannot return any data.
 
-### AppAPI:fa(PrivateKey, …)
-This is a short form version of FcnAsync. It takes at least one parameter:
-- **PrivateKey**: The private key for the app.
-- **...**: The arguments to be passed to the function.
+### Platform Detection
 
-## Sample Script
+- `SharedAPI:GetPlatform()`: Returns the current platform or environment.
 
+### Authentication
+
+- `PrismExt:Authenticate(App, AppData)` and `PrismExt:AuthenticateDriver(Driver, DriverData)`: These functions authenticate an app or a driver based on its data. It validates the app data, checks for dependencies, processes the entity's API, and creates an API package for the entity.
+
+ ## Build on Prism
+
+ ### Sample Application Structure
 ```lua
--- AppData for DataPlus, containing metadata
 local AppData = {
-	Version = "1.0",
-	Description = "n/a",
-	API = {},
-	FriendlyName = "Git's Test App"
+    Version = "1.0",
+    API = {
+        MyFunction = function(...)
+            -- Function implementation goes here
+        end,
+    },
+    FriendlyName = "MyApp",
 }
 
--- Authenticates with the Prism framework and starts the service
-local Data = {}
-local function AuthenticateWithPrism()
-	local APIPackage = Prism:Authenticate(script, AppData) -- Prism will return our API package
-	Data.PrivateKey = APIPackage.Key -- This is our private key. Without this, you cannot use Prism's API 
-	Data.Console = APIPackage.AppAPI -- This is the table featuring important functions from Prism's core systems 
+local APIPackage = PrismExt:Authenticate(script, AppData)
+
+if APIPackage then
+    local Key = APIPackage.Key
+    local AppAPI = APIPackage.AppAPI
+    -- Use the Key and AppAPI as needed
+
+    -- Example of using AppAPI.Write() function
+    AppAPI:Write(Key, "This is a message from MyApp.")
 end
-
-AuthenticateWithPrism()
-
--- Putting API calls in functions is easier if you're using the same API a lot 
-local function CoolerPrint(...)
-	Data.Console:Write(Data.PrivateKey, ...)
-end
-
-CoolerPrint("Hey cool dudes")
-
--- If this were a real function: 
--- Data.Console:f(Data.PrivateKey, "Ping")
--- It would return Pong! 
 ```
 
+### Sample Driver Structure
+```lua
+local DriverData = {
+    Version = "1.0",
+    API = {
+        MyFunction = function(...)
+            -- Function implementation goes here
+        end,
+    },
+    FriendlyName = "MyDriver",
+}
+
+local APIPackage = PrismExt:AuthenticateDriver(script, DriverData)
+
+if APIPackage then
+    local Key = APIPackage.Key
+    local AppAPI = APIPackage.AppAPI
+    local PrismCore = APIPackage.PrismCore
+    -- Use the Key, AppAPI, and PrismCore as needed
+
+    -- Example of using AppAPI.Write() function
+    AppAPI:Write(Key, "This is a message from MyDriver.")
+end
+```
+### How are drivers different?
+
+The big difference here is the PrismCore table. This lets you access majority of Prism's internal configurations, functions, and variables. You can use this to build on-to Prism and allow even bigger and stronger applications. 
+
+This is what you can access with your driver:
+
+ **Variables**
+- ``PrismCore.Terminal`` - Table of all output messages
+- ``PrismCore.ProdProducedInstances`` - Table of all produced instances under the ``Prod()`` function
+- ``PrismCore.FunctionExecutionsOnHeartbeat`` - Table of functions that execute on each Prism heartbeat
+- ``PrismCore.Flags`` - Configurations that can be updated in a live installation
+- ``PrismCore.SelfSign`` - String certificate that is required for many PrismCore functions
+
+**Functions**
+- ``PrismCore:AppFgpt(CondensedData)`` - Our App Fingerprint function handles a lot of the indexing/data verification processing in Prism
+- ``PrismCore:HeartBeat(...)`` - This function is designed to execute each time any function is called. You can integrate this feature into your driver and have it show up as part of Prism. 
+- ``PrismCore:ValidateVersionString(str)`` - This uses simple string manipulation to verify that the app/driver is not trying to break Prism with their string in AppData 
+- ``PrismCore:BlockApp(AppName)`` - This immediately cuts all access to the aforementioned app so it is not part of Prism anymore. This will also not allow it to communicate with other Prism apps. 
+- ``PrismCore:ProcessFcn(PrivateKey, ...)`` - This function can be used to execute API. 
+
+## Deprecated Functions
+
+The following functions are deprecated and are no longer recommended for use:
+
+- `PrismExt:VerifyIdentity(OneTimeKey)`,`SharedAPI:TerminateOneTimeKeys(AppRealKey, SpecificKey)`: These functions are deprecated because the OneTimeKey system is obsolete after security improvements throughout the entire framework.
+- `PrismExt:Fcn(PrivateKey, ...)`, `PrismExt:FcnAsync(PrivateKey, ...)`, `PrismExt:f(PrivateKey,...)`, and `PrismExt:fa(PrivateKey, ...)`: These functions are deprecated because all Fcn and FcnAsync calls are now available in the AppAPI table.
+
+Please note that while these functions are still present in the code for backward compatibility, their use is not recommended due to improvements in the security framework. It's always best to use the most up-to-date functions to ensure the highest level of security and performance.
