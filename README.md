@@ -40,7 +40,7 @@ Prism defines three levels of security clearance:
 
  ## Build on Prism
 
- ![image](https://github.com/carrcreative/prism/assets/173332208/ffe9711f-a233-44ac-bceb-b4ae3479d070)
+![image](https://github.com/carrcreative/prism/assets/173332208/c4eb6703-bd49-4609-9750-560d4b967a0b)
 
 
  ### Sample Application Structure
