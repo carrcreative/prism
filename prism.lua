@@ -114,7 +114,7 @@ function PrismCore:AppFgpt(CondensedData)
 	end
 end
 
-function SharedAPI:CheckDepends(data, friendlyname)
+function SharedAPI:CheckDepends(data, entity)
 	for _, dependency in ipairs(data) do
 		-- Check if the dependency is not loaded
 		local dependencyFound = false
@@ -133,8 +133,7 @@ function SharedAPI:CheckDepends(data, friendlyname)
 		end
 
 		if not dependencyFound then
-			wr("'"..friendlyname.."' cannot be installed due to missing dependency ('"..tostring(dependency).."')")
-			return false
+			return false, tostring(dependency)
 		end
 	end
 	return true
@@ -521,9 +520,10 @@ local function AuthenticateCommon(Entity, EntityData, isDriver)
 		local Incompatibility = false
 
 		if EntityData.Depends then 
-			local Finished = SharedAPI:CheckDepends(EntityData.Depends, EntityData.FriendlyName)
+			local Finished, MissingDependancy = SharedAPI:CheckDepends(EntityData.Depends, EntityData.FriendlyName)
 
 			if not Finished then
+				wr("'"..tostring(Entity).."' cannot be installed due to missing dependency ('"..tostring(MissingDependancy).."')")
 				Incompatibility = true 
 			end
 		end
@@ -542,9 +542,8 @@ local function AuthenticateCommon(Entity, EntityData, isDriver)
 			end
 		end
 
-		-- If there was a function name conflict, write an error message and return
 		if Incompatibility then 
-			wr("Launch of '"..Entity.Name.."-"..string.lower(SharedAPI:GetPlatform()).."' failed because of a duplicated function compatibility error. Function name: "..tostring(NameOfConflict))
+			wr("Install of '"..Entity.Name.."' failed due to a compatibility error.")
 			return
 		end
 
