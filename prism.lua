@@ -7,7 +7,7 @@
 |  ____/ ___) |/___)    \ 
 | |   | |   | |___ | | | |
 |_|   |_|   |_(___/|_|_|_|
-An open-source project
+An open-source project.
                                                 
 ]]
 
